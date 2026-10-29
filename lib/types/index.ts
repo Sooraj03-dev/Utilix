@@ -20,6 +20,7 @@ export type {
   TiebreakMethod,
   AuditAction,
   Weekday,
+  TrainingRequestStatus,
 } from "./enums";
 
 // Entity interfaces
@@ -29,6 +30,7 @@ export type {
   Resource,
   AvailabilityWindow,
   TrainingCertification,
+  TrainingRequest,
   Booking,
   TiebreakInfo,
   Bundle,
@@ -113,6 +115,7 @@ export const COLLECTIONS = {
   resources: "resources",
   availability_windows: "availability_windows",
   training_certifications: "training_certifications",
+  training_requests: "training_requests",
   bookings: "bookings",
   bundles: "bundles",
   waitlist: "waitlist",

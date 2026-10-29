@@ -17,6 +17,8 @@ export * from "./notifications";
 export * from "./users";
 export * from "./training";
 export * from "./training-requests";
+export * from "./availability";
+export * from "./coordinator-helpers";
 export * from "./audit";
 export * from "./ledger";
 export * from "./errors";

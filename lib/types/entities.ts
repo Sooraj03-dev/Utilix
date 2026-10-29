@@ -20,6 +20,7 @@ import type {
   TiebreakMethod,
   AuditAction,
   Weekday,
+  TrainingRequestStatus,
 } from "./enums";
 
 // ─── users ───
@@ -88,6 +89,20 @@ export interface TrainingCertification {
   training_type: string;
   certified_by: string;
   certified_at: string;
+  expires_at?: string | null;
+  revoked_at?: string | null;
+}
+
+// ─── training_requests ───
+export interface TrainingRequest {
+  id: string;
+  user_id: string;
+  training_type: string;
+  status: TrainingRequestStatus;
+  created_at: string;
+  decided_at?: string | null;
+  decided_by?: string | null;
+  notes?: string | null;
 }
 
 // ─── bookings ───
@@ -278,4 +293,3 @@ export interface AuthUser {
   name: string;
   role: UserRole;
 }
-
