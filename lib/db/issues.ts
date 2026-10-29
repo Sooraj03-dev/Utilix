@@ -46,6 +46,36 @@ export async function listIssues(filter: {
     .filter((i): i is IssueReport => i !== null);
 }
 
+/**
+ * Paginated issue reports for a user, newest first (20 per page).
+ */
+export async function listIssuesPage(
+  userId: string,
+  pageSize = 20,
+  cursorId?: string | null
+): Promise<{ items: IssueReport[]; nextCursor: string | null }> {
+  let query = issueReportsCol()
+    .where("user_id", "==", userId)
+    .orderBy("created_at", "desc")
+    .limit(pageSize + 1);
+
+  if (cursorId) {
+    const cursorSnap = await issueReportsCol().doc(cursorId).get();
+    if (!cursorSnap.exists) return { items: [], nextCursor: null };
+    query = query.startAfter(cursorSnap);
+  }
+
+  const snap = await query.get();
+  const items = snap.docs
+    .slice(0, pageSize)
+    .map((d) => docToEntity<IssueReport>(d.id, d.data()))
+    .filter((i): i is IssueReport => i !== null);
+
+  const nextCursor =
+    snap.docs.length > pageSize ? snap.docs[pageSize - 1].id : null;
+  return { items, nextCursor };
+}
+
 /** Create a new issue report. */
 export async function createIssue(
   input: CreateIssueInput,
