@@ -198,14 +198,6 @@ export interface IssueReport {
   created_at: string;
 }
 
-// ─── training_requests ───
-export interface TrainingRequest {
-  id: string;
-  user_id: string;
-  training_type: string;
-  status: TrainingRequestStatus;
-  created_at: string;
-}
 
 // ─── credit_ledger ───
 // Doc ID = idempotency_key
