@@ -5,7 +5,13 @@ import "server-only";
 import { auditLogCol } from "./collections";
 import { docToEntity, nowISO, nowTimestamp } from "./converters";
 import type { AuditAction, AuditLogEntry } from "@/lib/types";
-import type { Transaction, WriteBatch } from "firebase-admin/firestore";
+import {
+  matchesAuditFilter,
+  type AuditFilterCriteria,
+} from "@/lib/audit-filters";
+import type { Transaction, WriteBatch, Query, DocumentData } from "firebase-admin/firestore";
+
+export type { AuditFilterCriteria };
 
 export interface WriteAuditInput {
   actor_id: string;
@@ -84,4 +90,74 @@ export async function getAuditLog(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
   return entries;
+}
+
+/**
+ * Query audit log with multi-field filters and cursor-based pagination.
+ * Always returns newest entries first.
+ */
+export async function queryAuditLogs(
+  criteria: AuditFilterCriteria = {},
+  pageSize: number = 25,
+  cursor?: string
+): Promise<{
+  entries: AuditLogEntry[];
+  nextCursor: string | null;
+  prevCursor: string | null;
+  totalMatching: number;
+}> {
+  // Query Firestore collection
+  let query: Query<DocumentData> = auditLogCol();
+
+  if (criteria.entity_id) {
+    query = query.where("entity_id", "==", criteria.entity_id);
+  } else if (criteria.entity_type) {
+    query = query.where("entity_type", "==", criteria.entity_type);
+  } else if (criteria.action) {
+    query = query.where("action", "==", criteria.action);
+  }
+
+  const snap = await query.get();
+  const rawEntries = snap.docs
+    .map((d) => docToEntity<AuditLogEntry>(d.id, d.data()))
+    .filter((e): e is AuditLogEntry => e !== null);
+
+  // Sort newest first
+  rawEntries.sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+
+  // Apply full criteria filter
+  const filtered = rawEntries.filter((entry) =>
+    matchesAuditFilter(entry, criteria)
+  );
+
+  // Apply cursor pagination
+  let startIndex = 0;
+  if (cursor) {
+    const foundIdx = filtered.findIndex((e) => e.id === cursor);
+    if (foundIdx >= 0) {
+      startIndex = foundIdx + 1;
+    }
+  }
+
+  const limit = criteria.limit || pageSize;
+  const pageEntries = filtered.slice(startIndex, startIndex + limit);
+
+  const nextCursor =
+    pageEntries.length === limit && startIndex + limit < filtered.length
+      ? pageEntries[pageEntries.length - 1].id
+      : null;
+
+  const prevCursor =
+    startIndex > 0 && filtered[Math.max(0, startIndex - limit - 1)]
+      ? filtered[Math.max(0, startIndex - limit - 1)].id
+      : null;
+
+  return {
+    entries: pageEntries,
+    nextCursor,
+    prevCursor,
+    totalMatching: filtered.length,
+  };
 }
