@@ -2,6 +2,7 @@
 // Owner: A
 import "server-only";
 
+import { adminDb } from "@/lib/firebase/admin";
 import { notificationsCol } from "./collections";
 import { docToEntity, nowISO, nowTimestamp } from "./converters";
 import type { Notification } from "@/lib/types";
@@ -68,4 +69,32 @@ export async function markNotificationRead(
   read = true
 ): Promise<void> {
   await notificationsCol().doc(id).update({ read });
+}
+
+/** Count unread notifications for a user. For C's notification bell. */
+export async function getUnreadCount(userId: string): Promise<number> {
+  const snap = await notificationsCol()
+    .where("user_id", "==", userId)
+    .where("read", "==", false)
+    .count()
+    .get();
+
+  return snap.data().count;
+}
+
+/** Mark every unread notification of a user as read. Returns the count updated. */
+export async function markAllNotificationsRead(userId: string): Promise<number> {
+  const snap = await notificationsCol()
+    .where("user_id", "==", userId)
+    .where("read", "==", false)
+    .get();
+
+  if (snap.empty) return 0;
+
+  const batch = adminDb.batch();
+  for (const doc of snap.docs) {
+    batch.update(doc.ref, { read: true });
+  }
+  await batch.commit();
+  return snap.docs.length;
 }
