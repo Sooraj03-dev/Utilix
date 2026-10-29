@@ -1,9 +1,9 @@
 import {
-  buildErrorEnvelope,
-  buildSuccessEnvelope,
+  errorResponse,
   forecastDemand,
   ForecastRequestSchema,
   getLLMConfig,
+  okResponse,
   parseJsonRequest,
 } from "../../../../lib/ai/index.js";
 
@@ -26,24 +26,12 @@ export async function POST(request: Request): Promise<Response> {
     const meta = {
       latencyMs,
       policyVersion: "v1",
-      llm: {
-        attempted: false,
-        succeeded: false,
-        provider: config.provider,
-        errorCode: null,
-      },
+      llm: { attempted: false, succeeded: false, provider: config.provider, errorCode: null },
     };
 
-    const envelope = buildSuccessEnvelope(data, "fallback", meta);
-    return new Response(JSON.stringify(envelope), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+    return okResponse(data, "fallback", meta);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Error forecasting demand";
-    return new Response(
-      JSON.stringify(buildErrorEnvelope("INTERNAL_ERROR", message)),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
+    return errorResponse("INTERNAL_ERROR", message, undefined, 500);
   }
 }

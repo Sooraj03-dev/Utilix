@@ -1,11 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
-  buildErrorEnvelope,
-  buildSuccessEnvelope,
+  errorResponse,
   generateInsights,
   getLLMConfig,
   InsightsRequestSchema,
+  okResponse,
   parseJsonRequest,
 } from "../../../../lib/ai/index.js";
 
@@ -17,10 +17,7 @@ export async function GET(request: Request): Promise<Response> {
   const isDemo = url.searchParams.get("demo") === "1";
 
   if (!isDemo) {
-    return new Response(
-      JSON.stringify(buildErrorEnvelope("BAD_REQUEST", "Use POST for insights or GET with ?demo=1")),
-      { status: 400, headers: { "Content-Type": "application/json" } }
-    );
+    return errorResponse("BAD_REQUEST", "Use POST for insights or GET with ?demo=1", undefined, 400);
   }
 
   try {
@@ -33,25 +30,13 @@ export async function GET(request: Request): Promise<Response> {
     const meta = {
       latencyMs: 5,
       policyVersion: "v1",
-      llm: {
-        attempted: false,
-        succeeded: false,
-        provider: config.provider,
-        errorCode: null,
-      },
+      llm: { attempted: false, succeeded: false, provider: config.provider, errorCode: null },
     };
 
-    const envelope = buildSuccessEnvelope(data, "fallback", meta);
-    return new Response(JSON.stringify(envelope), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+    return okResponse(data, "fallback", meta);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Error reading demo insights fixture";
-    return new Response(
-      JSON.stringify(buildErrorEnvelope("INTERNAL_ERROR", message)),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
+    return errorResponse("INTERNAL_ERROR", message, undefined, 500);
   }
 }
 
@@ -71,24 +56,12 @@ export async function POST(request: Request): Promise<Response> {
     const meta = {
       latencyMs,
       policyVersion: "v1",
-      llm: {
-        attempted: false,
-        succeeded: false,
-        provider: config.provider,
-        errorCode: null,
-      },
+      llm: { attempted: false, succeeded: false, provider: config.provider, errorCode: null },
     };
 
-    const envelope = buildSuccessEnvelope(data, "fallback", meta);
-    return new Response(JSON.stringify(envelope), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+    return okResponse(data, "fallback", meta);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Error generating insights";
-    return new Response(
-      JSON.stringify(buildErrorEnvelope("INTERNAL_ERROR", message)),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
+    return errorResponse("INTERNAL_ERROR", message, undefined, 500);
   }
 }

@@ -1,10 +1,10 @@
 import {
   AllocateRequestSchema,
   allocateRequests,
-  buildErrorEnvelope,
-  buildSuccessEnvelope,
+  errorResponse,
   explainRanking,
   mergePolicy,
+  okResponse,
   parseJsonRequest,
 } from "../../../../lib/ai/index.js";
 
@@ -21,10 +21,7 @@ export async function POST(request: Request): Promise<Response> {
   const policy = mergePolicy(input.policy);
 
   try {
-    // 1. Run deterministic allocation engine
     const allocation = allocateRequests(input, "fallback");
-
-    // 2. Enhance explanations with LLM if available (with fallback guarantee)
     const explainRes = await explainRanking(
       allocation.ranking,
       input.slot.resourceName,
@@ -41,17 +38,9 @@ export async function POST(request: Request): Promise<Response> {
       llm: explainRes.llm,
     };
 
-    const envelope = buildSuccessEnvelope(allocation, explainRes.source, meta);
-
-    return new Response(JSON.stringify(envelope), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+    return okResponse(allocation, explainRes.source, meta);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Internal allocation error";
-    return new Response(
-      JSON.stringify(buildErrorEnvelope("INTERNAL_ERROR", message)),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
+    return errorResponse("INTERNAL_ERROR", message, undefined, 500);
   }
 }

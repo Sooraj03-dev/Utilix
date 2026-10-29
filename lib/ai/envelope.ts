@@ -24,12 +24,7 @@ export function buildSuccessEnvelope<T>(
   source: "ai" | "fallback",
   meta: Meta
 ): SuccessEnvelope<T> {
-  return {
-    ok: true,
-    source,
-    data,
-    meta,
-  };
+  return { ok: true, source, data, meta };
 }
 
 export function buildErrorEnvelope(
@@ -37,14 +32,31 @@ export function buildErrorEnvelope(
   message: string,
   issues?: unknown
 ): ErrorEnvelope {
-  return {
-    ok: false,
-    error: {
-      code,
-      message,
-      issues,
-    },
-  };
+  return { ok: false, error: { code, message, issues } };
+}
+
+export function okResponse<T>(
+  data: T,
+  source: "ai" | "fallback",
+  meta: Meta,
+  status = 200
+): Response {
+  return new Response(JSON.stringify(buildSuccessEnvelope(data, source, meta)), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export function errorResponse(
+  code: string,
+  message: string,
+  issues?: unknown,
+  status = 400
+): Response {
+  return new Response(JSON.stringify(buildErrorEnvelope(code, message, issues)), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 export async function parseJsonRequest<Output, Input = unknown>(
@@ -59,14 +71,11 @@ export async function parseJsonRequest<Output, Input = unknown>(
     if (byteLength > MAX_BODY_BYTES) {
       return {
         success: false,
-        response: new Response(
-          JSON.stringify(
-            buildErrorEnvelope(
-              "VALIDATION_ERROR",
-              `Request body exceeds maximum size of ${MAX_BODY_BYTES / 1024} KB`
-            )
-          ),
-          { status: 400, headers: { "Content-Type": "application/json" } }
+        response: errorResponse(
+          "VALIDATION_ERROR",
+          `Request body exceeds maximum size of ${MAX_BODY_BYTES / 1024} KB`,
+          undefined,
+          400
         ),
       };
     }
@@ -77,10 +86,7 @@ export async function parseJsonRequest<Output, Input = unknown>(
     } catch {
       return {
         success: false,
-        response: new Response(
-          JSON.stringify(buildErrorEnvelope("VALIDATION_ERROR", "Invalid JSON format")),
-          { status: 400, headers: { "Content-Type": "application/json" } }
-        ),
+        response: errorResponse("VALIDATION_ERROR", "Invalid JSON format", undefined, 400),
       };
     }
 
@@ -88,15 +94,11 @@ export async function parseJsonRequest<Output, Input = unknown>(
     if (!validation.success) {
       return {
         success: false,
-        response: new Response(
-          JSON.stringify(
-            buildErrorEnvelope(
-              "VALIDATION_ERROR",
-              "Request validation failed",
-              validation.error.issues
-            )
-          ),
-          { status: 400, headers: { "Content-Type": "application/json" } }
+        response: errorResponse(
+          "VALIDATION_ERROR",
+          "Request validation failed",
+          validation.error.issues,
+          400
         ),
       };
     }
@@ -110,10 +112,7 @@ export async function parseJsonRequest<Output, Input = unknown>(
     const message = err instanceof Error ? err.message : "Unknown error processing request";
     return {
       success: false,
-      response: new Response(
-        JSON.stringify(buildErrorEnvelope("INTERNAL_ERROR", message)),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      ),
+      response: errorResponse("INTERNAL_ERROR", message, undefined, 400),
     };
   }
 }
