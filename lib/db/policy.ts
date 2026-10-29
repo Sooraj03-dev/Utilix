@@ -111,3 +111,70 @@ export async function createPolicyVersion(
     };
   });
 }
+
+/**
+ * Lists all policy versions in Firestore, newest first.
+ * If no versions exist in Firestore, returns a list containing DEFAULT_POLICY.
+ */
+export async function listPolicyVersions(): Promise<Policy[]> {
+  const snap = await policiesCol().get();
+  if (snap.empty) {
+    return [DEFAULT_POLICY];
+  }
+
+  const policies: Policy[] = snap.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      version: data.version ?? 0,
+      is_active: Boolean(data.is_active),
+      monthly_credits: data.monthly_credits ?? DEFAULT_POLICY.monthly_credits,
+      free_sessions_per_week:
+        data.free_sessions_per_week ?? DEFAULT_POLICY.free_sessions_per_week,
+      max_active_bookings:
+        data.max_active_bookings ?? DEFAULT_POLICY.max_active_bookings,
+      slot_minutes: data.slot_minutes ?? DEFAULT_POLICY.slot_minutes,
+      cancel_refund_hours:
+        data.cancel_refund_hours ?? DEFAULT_POLICY.cancel_refund_hours,
+      weights: data.weights ?? DEFAULT_POLICY.weights,
+      tiebreak_order: data.tiebreak_order ?? DEFAULT_POLICY.tiebreak_order,
+      peak_definition: data.peak_definition ?? DEFAULT_POLICY.peak_definition,
+      deadline_window_days:
+        data.deadline_window_days ?? DEFAULT_POLICY.deadline_window_days,
+      created_by: data.created_by ?? "system",
+      created_at: toISO(data.created_at as TimestampLike) ?? DEFAULT_POLICY.created_at,
+    };
+  });
+
+  policies.sort((a, b) => b.version - a.version);
+  return policies;
+}
+
+/**
+ * Gets a specific policy version by version number.
+ */
+export async function getPolicyByVersion(version: number): Promise<Policy | null> {
+  const snap = await policiesCol().doc(`v${version}`).get();
+  if (!snap.exists) return null;
+  const data = snap.data()!;
+  return {
+    id: snap.id,
+    version: data.version ?? version,
+    is_active: Boolean(data.is_active),
+    monthly_credits: data.monthly_credits ?? DEFAULT_POLICY.monthly_credits,
+    free_sessions_per_week:
+      data.free_sessions_per_week ?? DEFAULT_POLICY.free_sessions_per_week,
+    max_active_bookings:
+      data.max_active_bookings ?? DEFAULT_POLICY.max_active_bookings,
+    slot_minutes: data.slot_minutes ?? DEFAULT_POLICY.slot_minutes,
+    cancel_refund_hours:
+      data.cancel_refund_hours ?? DEFAULT_POLICY.cancel_refund_hours,
+    weights: data.weights ?? DEFAULT_POLICY.weights,
+    tiebreak_order: data.tiebreak_order ?? DEFAULT_POLICY.tiebreak_order,
+    peak_definition: data.peak_definition ?? DEFAULT_POLICY.peak_definition,
+    deadline_window_days:
+      data.deadline_window_days ?? DEFAULT_POLICY.deadline_window_days,
+    created_by: data.created_by ?? "system",
+    created_at: toISO(data.created_at as TimestampLike) ?? DEFAULT_POLICY.created_at,
+  };
+}
