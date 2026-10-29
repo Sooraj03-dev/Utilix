@@ -1,38 +1,46 @@
 /* ═══════════════════════════════════════════════════════════════════════════
  * Workflow Types — Owner B
  *
- * These types live in owner B's domain and define the booking-workflow
- * contract. They do NOT duplicate lib/types/index.ts (Owner A) — they will
- * import shared types from there once Owner A publishes them.
+ * Imports and re-exports Owner A's shared foundation contracts, and defines
+ * workflow-specific form, validation, and UI model types.
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-// ─── Resource / Equipment / Space ─────────────────────────────────────────
+import type {
+  Resource as FoundationResource,
+  Booking,
+  BookingStatus,
+  ResourceStatus,
+  SlotType,
+  UserRole,
+  AuthUser,
+  CreateBookingRequest,
+  CreateBookingResponse,
+  CancelBookingResponse,
+  ApiResponse as FoundationApiResponse,
+  ApiError,
+} from "@/lib/types";
 
-export type ResourceCategory = "equipment" | "space";
+// Re-export foundation types
+export type {
+  FoundationResource as Resource,
+  Booking,
+  BookingStatus,
+  ResourceStatus,
+  SlotType,
+  UserRole,
+  AuthUser,
+  CreateBookingRequest,
+  CreateBookingResponse,
+  CancelBookingResponse,
+  FoundationApiResponse,
+  ApiError,
+};
 
-export type ResourceStatus = "available" | "in-use" | "maintenance" | "retired";
+// ─── Resource Category for UI Filter ─────────────────────────────────────
 
-export interface Resource {
-  id: string;
-  name: string;
-  category: ResourceCategory;
-  department: string;
-  description: string;
-  location: string;
-  capacity: number;
-  imageUrl?: string;
-  status: ResourceStatus;
-  /** Tags for filtering, e.g. ["3D printer", "laser cutter"] */
-  tags: string[];
-  /** Whether training verification is needed before booking */
-  requiresTraining: boolean;
-  /** Minimum booking duration in minutes */
-  minDurationMinutes: number;
-  /** Maximum booking duration in minutes */
-  maxDurationMinutes: number;
-}
+export type ResourceCategory = "equipment" | "space" | "all";
 
-// ─── Time Slots ───────────────────────────────────────────────────────────
+// ─── Time Slots for UI ───────────────────────────────────────────────────
 
 export interface TimeSlot {
   id: string;
@@ -43,16 +51,7 @@ export interface TimeSlot {
   isAvailable: boolean;
 }
 
-// ─── Booking Request ──────────────────────────────────────────────────────
-
-export type RequestStatus =
-  | "pending"
-  | "approved"
-  | "rejected"
-  | "cancelled"
-  | "waitlisted"
-  | "checked-out"
-  | "returned";
+// ─── Form Input Data ─────────────────────────────────────────────────────
 
 export interface BookingFormData {
   resourceId: string;
@@ -60,72 +59,13 @@ export interface BookingFormData {
   startTime: string;
   endTime: string;
   purpose: string;
-  /** Additional details/requirements from the user */
   notes: string;
-  /** Number of people (for spaces) */
   headcount?: number;
 }
 
-export interface BookingRequest {
-  id: string;
-  resourceId: string;
-  resourceName: string;
-  userId: string;
-  userName: string;
-  department: string;
-  status: RequestStatus;
-  purpose: string;
-  notes: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  headcount?: number;
-  createdAt: string; // ISO datetime
-  updatedAt: string;
-  /** Reason if rejected */
-  rejectionReason?: string;
-  /** Rank position from AI allocation (if processed) */
-  rank?: number;
-  /** AI explanation shown to the student */
-  studentExplanation?: string;
-  /** Alternative resources suggested by AI */
-  alternatives?: AlternativeResource[];
-}
+// ─── UI-Facing Request (Bridge for Booking) ──────────────────────────────
 
-// ─── AI Allocation Response (mirrors ai-service schemas) ──────────────────
-
-export interface ScoreBreakdown {
-  usage: number;
-  waiting: number;
-  need: number;
-  diversity: number;
-}
-
-export interface RankedRequest {
-  requestId: string;
-  userId: string;
-  rank: number;
-  totalScore: number;
-  scoreBreakdown: ScoreBreakdown;
-  studentReason: string;
-  coordinatorSummary: string;
-  decidedBy?: string;
-  tiedWith: string[];
-  explanationSource?: string;
-}
-
-export interface ExcludedRequest {
-  requestId: string;
-  userId: string;
-  reason: string;
-  code: string;
-}
-
-export interface AllocationResult {
-  allocated: RankedRequest[];
-  waitlist: RankedRequest[];
-  excluded: ExcludedRequest[];
-}
+export type RequestStatus = BookingStatus;
 
 export interface AlternativeResource {
   slotId: string;
@@ -137,61 +77,29 @@ export interface AlternativeResource {
   reason: string;
 }
 
-// ─── AI Client Contract ──────────────────────────────────────────────────
-
-export interface AIAllocationRequest {
+export interface BookingRequest {
+  id: string;
   resourceId: string;
-  slotId: string;
-  requests: {
-    id: string;
-    userId: string;
-    userName: string;
-    department: string;
-    sessionsThisMonth: number;
-    waitingHours: number;
-    projectNeedScore: number;
-  }[];
-}
-
-export interface AIAlternativesRequest {
-  resourceId: string;
-  slotId: string;
+  resourceName: string;
   userId: string;
-  department: string;
+  userName?: string;
+  department?: string;
+  status: RequestStatus;
+  purpose: string;
+  notes?: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  headcount?: number;
+  costCredits?: number;
+  createdAt: string;
+  updatedAt: string;
+  rank?: number;
+  studentExplanation?: string;
+  alternatives?: AlternativeResource[];
 }
 
-export interface AIInsightsRequest {
-  resourceIds: string[];
-  dateRange: { start: string; end: string };
-}
-
-export interface AIInsightsResponse {
-  equipmentUtilization: Record<string, number>;
-  contentionRate: Record<string, number>;
-  giniCoefficient: number;
-  jainFairnessIndex: number;
-  recommendations: { title: string; description: string }[];
-  narrative: string[];
-}
-
-// ─── API Response Wrappers ────────────────────────────────────────────────
-
-export interface ApiSuccessResponse<T> {
-  success: true;
-  data: T;
-  /** Present when mock adapter is used */
-  _mock?: boolean;
-}
-
-export interface ApiErrorResponse {
-  success: false;
-  error: string;
-  code?: string;
-}
-
-export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
-
-// ─── Form Validation ──────────────────────────────────────────────────────
+// ─── Form Validation ─────────────────────────────────────────────────────
 
 export interface ValidationError {
   field: string;
@@ -202,4 +110,3 @@ export interface ValidationResult {
   valid: boolean;
   errors: ValidationError[];
 }
-

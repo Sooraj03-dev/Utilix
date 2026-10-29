@@ -1,29 +1,34 @@
 /* ═══════════════════════════════════════════════════════════════════════════
  * My Requests Page — View all booking requests with status
  * Owner B · app/(workflow)/requests/page.tsx
- *
- * ⚠️ MOCK: Displays in-memory requests only.
  * ═══════════════════════════════════════════════════════════════════════════ */
 "use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import type { BookingRequest, RequestStatus } from "../_lib/types";
+import type { Booking, BookingStatus } from "../_lib/types";
 
-const STATUS_STYLES: Record<RequestStatus, { bg: string; text: string; label: string }> = {
-  pending: { bg: "bg-yellow-100", text: "text-yellow-800", label: "Pending" },
-  approved: { bg: "bg-green-100", text: "text-green-800", label: "Approved" },
-  rejected: { bg: "bg-red-100", text: "text-red-800", label: "Rejected" },
+const STATUS_STYLES: Record<
+  BookingStatus,
+  { bg: string; text: string; label: string }
+> = {
+  submitted: { bg: "bg-yellow-100", text: "text-yellow-800", label: "Submitted" },
+  eligibility_passed: { bg: "bg-blue-100", text: "text-blue-800", label: "Eligibility Passed" },
+  allocated: { bg: "bg-indigo-100", text: "text-indigo-800", label: "Allocated" },
+  waitlisted: { bg: "bg-amber-100", text: "text-amber-800", label: "Waitlisted" },
+  pending_approval: { bg: "bg-orange-100", text: "text-orange-800", label: "Pending Approval" },
+  confirmed: { bg: "bg-green-100", text: "text-green-800", label: "Confirmed" },
+  checked_out: { bg: "bg-purple-100", text: "text-purple-800", label: "Checked Out" },
+  returned: { bg: "bg-teal-100", text: "text-teal-800", label: "Returned" },
   cancelled: { bg: "bg-gray-100", text: "text-gray-600", label: "Cancelled" },
-  waitlisted: { bg: "bg-blue-100", text: "text-blue-800", label: "Waitlisted" },
-  "checked-out": { bg: "bg-purple-100", text: "text-purple-800", label: "Checked Out" },
-  returned: { bg: "bg-gray-100", text: "text-gray-600", label: "Returned" },
+  rejected: { bg: "bg-red-100", text: "text-red-800", label: "Rejected" },
+  no_show: { bg: "bg-rose-100", text: "text-rose-800", label: "No Show" },
 };
 
-type FilterStatus = RequestStatus | "all";
+type FilterStatus = BookingStatus | "all";
 
 export default function RequestsPage() {
-  const [requests, setRequests] = useState<BookingRequest[]>([]);
+  const [requests, setRequests] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterStatus>("all");
@@ -35,7 +40,7 @@ export default function RequestsPage() {
       try {
         const res = await fetch("/api/workflow/requests");
         const json = await res.json();
-        if (!json.success) throw new Error(json.error);
+        if (!json.success) throw new Error(json.error?.message || json.error || "Failed to load requests");
         setRequests(json.data);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load requests");
@@ -58,7 +63,7 @@ export default function RequestsPage() {
         <div>
           <h1 className="text-2xl font-bold text-utilix-black">My Requests</h1>
           <p className="text-gray-600 mt-1">
-            Track your booking requests and their status.
+            Track your resource bookings, allocations, and waitlist status.
           </p>
         </div>
         <Link
@@ -75,10 +80,10 @@ export default function RequestsPage() {
         {(
           [
             "all",
-            "pending",
-            "approved",
+            "confirmed",
+            "allocated",
             "waitlisted",
-            "rejected",
+            "submitted",
             "cancelled",
           ] as FilterStatus[]
         ).map((status) => (
@@ -145,7 +150,11 @@ export default function RequestsPage() {
       {!loading && !error && filtered.length > 0 && (
         <div className="space-y-3">
           {filtered.map((req) => {
-            const style = STATUS_STYLES[req.status] ?? STATUS_STYLES.pending;
+            const style = STATUS_STYLES[req.status] ?? STATUS_STYLES.submitted;
+            const date = req.slot_start ? req.slot_start.split("T")[0] : "";
+            const startTime = req.slot_start ? req.slot_start.slice(11, 16) : "";
+            const endTime = req.slot_end ? req.slot_end.slice(11, 16) : "";
+
             return (
               <Link
                 key={req.id}
@@ -156,10 +165,10 @@ export default function RequestsPage() {
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-utilix-black truncate">
-                      {req.resourceName}
+                      {req.resource_id}
                     </h3>
                     <p className="text-sm text-gray-500 mt-0.5">
-                      {req.date} · {req.startTime}–{req.endTime}
+                      {date} · {startTime}–{endTime}
                     </p>
                   </div>
                   <span
@@ -171,41 +180,22 @@ export default function RequestsPage() {
 
                 <p className="text-sm text-gray-600 truncate">{req.purpose}</p>
 
-                {/* Rank info */}
-                {req.rank != null && (
-                  <p className="text-xs text-gray-400 mt-2">
-                    Ranked #{req.rank} by AI allocation
-                    {req.studentExplanation && (
-                      <span className="ml-1">· {req.studentExplanation}</span>
-                    )}
+                {/* Decision reason */}
+                {req.decision_reason && (
+                  <p className="text-xs text-gray-500 mt-2 bg-gray-50 p-2 rounded">
+                    💡 {req.decision_reason}
                   </p>
                 )}
 
-                {/* Alternatives */}
-                {req.alternatives && req.alternatives.length > 0 && (
-                  <div className="mt-2 text-xs text-blue-600">
-                    💡 {req.alternatives.length} alternative slot
-                    {req.alternatives.length > 1 ? "s" : ""} suggested
-                  </div>
-                )}
-
                 <div className="mt-3 flex items-center justify-between text-xs text-gray-400">
-                  <span>ID: {req.id}</span>
+                  <span>Booking ID: {req.id}</span>
                   <span>
-                    Submitted{" "}
-                    {new Date(req.createdAt).toLocaleDateString()}
+                    Created: {new Date(req.created_at).toLocaleDateString()}
                   </span>
                 </div>
               </Link>
             );
           })}
-        </div>
-      )}
-
-      {/* Mock notice */}
-      {!loading && requests.length > 0 && (
-        <div className="mt-6 text-center text-xs text-gray-400">
-          ⚠️ Mock mode — displaying in-memory data only
         </div>
       )}
     </div>

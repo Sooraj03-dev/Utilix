@@ -1,167 +1,119 @@
 /* ═══════════════════════════════════════════════════════════════════════════
  * AI Service Client — Owner B
  *
- * Typed interface for communicating with the AI/ML teammate's FastAPI
- * allocation engine. Uses a mock adapter until the real endpoint is
- * available.
+ * Client for communicating with the AI/ML teammate's FastAPI service:
+ * - POST /allocate: Deterministic fair allocation engine
+ * - POST /alternatives: Smart alternative slot recommendations
+ * - POST /bundle: Multi-resource synchronous bundle scheduling
+ * - GET /health: Health check endpoint
  *
- * ⚠️  MOCK ADAPTER ACTIVE — All responses are fabricated. The mock adapter
- *     simulates latency and returns plausible but hard-coded results.
- *     Replace with the real HTTP adapter when the AI teammate provides
- *     the FastAPI endpoint URL and confirms the request/response contract.
- *
- * To swap:
- *   1. Set AI_SERVICE_URL and AI_SERVICE_SECRET in .env.local
- *   2. Change the export at the bottom to use `HttpAIClient`
+ * Rules:
+ * - AI recommendations NEVER override availability, security, authorization,
+ *   or database invariants.
+ * - If the AI service fails or is unreachable, fallback to deterministic
+ *   heuristics with `explanationSource: "fallback"`.
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-// ─── Types (mirroring ai-service/app/schemas.py) ─────────────────────────
+import type {
+  AISlot,
+  AIAllocateRequest,
+  AIAllocateResponse,
+  AIRankingItem,
+  AIAlternativesRequest,
+  AIAlternativesResponse,
+  AIBundleRequest,
+  AIBundleResponse,
+} from "@/lib/types";
 
-export interface AIScoreBreakdown {
-  usage: number;
-  waiting: number;
-  need: number;
-  diversity: number;
-}
-
-export interface AIRankingItem {
-  requestId: string;
-  userId: string;
-  rank: number;
-  totalScore: number;
-  scoreBreakdown: AIScoreBreakdown;
-  studentReason: string;
-  coordinatorSummary: string;
-  decidedBy?: string;
-  tiedWith: string[];
-  explanationSource?: string;
-}
-
-export interface AIExcludedItem {
-  requestId: string;
-  userId: string;
-  reason: string;
-  code: string;
-}
-
-export interface AIAllocateRequest {
-  slot: {
-    id: string;
-    resourceId: string;
-    resourceName: string;
-    department: string;
-    startTime: string;
-    endTime: string;
-    capacity: number;
-  };
-  requests: {
-    id: string;
-    userId: string;
-    userName: string;
-    department: string;
-    requestedSlotId: string;
-    sessionsThisMonth: number;
-    waitingHours: number;
-    projectNeedScore: number;
-    isPriorityGroup: boolean;
-    trainingVerified: boolean;
-    withinBookingLimit: boolean;
-    noOverlap: boolean;
-    resourceAvailable: boolean;
-    currentCreditBalance: number;
-    freeSessionsLeft: number;
-    submittedAt: string;
-  }[];
-}
-
-export interface AIAllocateResponse {
-  allocated: AIRankingItem[];
-  waitlist: AIRankingItem[];
-  excluded: AIExcludedItem[];
-  audit: {
-    totalRequests: number;
-    eligibleRequests: number;
-    excludedRequests: number;
-    capacity: number;
-    executionTimeMs: number;
-  };
-}
-
-export interface AIAlternativeOption {
-  slot: {
-    id: string;
-    resourceId: string;
-    resourceName: string;
-    startTime: string;
-    endTime: string;
-  };
-  scoreDiff: number;
-  reason: string;
-}
-
-export interface AIAlternativesResponse {
-  alternatives: AIAlternativeOption[];
-}
+// Re-export shared types for callers
+export type {
+  AISlot,
+  AIAllocateRequest,
+  AIAllocateResponse,
+  AIRankingItem,
+  AIAlternativesRequest,
+  AIAlternativesResponse,
+  AIBundleRequest,
+  AIBundleResponse,
+};
 
 // ─── Client Interface ────────────────────────────────────────────────────
 
 export interface AIClient {
   /** Check if the AI service is reachable */
-  healthCheck(): Promise<{ ok: boolean; service: string }>;
+  healthCheck(): Promise<{ ok: boolean; service: string; llmProvider?: string }>;
 
   /** Request allocation ranking for competing requests on a slot */
   allocate(request: AIAllocateRequest): Promise<AIAllocateResponse>;
 
   /** Get alternative slot suggestions for a user */
-  getAlternatives(
-    resourceId: string,
-    slotId: string,
-    userId: string,
-    department: string,
-  ): Promise<AIAlternativesResponse>;
+  getAlternatives(request: AIAlternativesRequest): Promise<AIAlternativesResponse>;
+
+  /** Schedule multi-resource bundle */
+  bundle(request: AIBundleRequest): Promise<AIBundleResponse>;
 }
 
-// ─── Mock Implementation ─────────────────────────────────────────────────
+// ─── Custom Errors ───────────────────────────────────────────────────────
 
-/** Simulate network latency */
-function mockDelay(ms: number = 600): Promise<void> {
+export class AIServiceError extends Error {
+  constructor(
+    message: string,
+    public readonly statusCode?: number,
+    public readonly code: string = "AI_SERVICE_ERROR",
+  ) {
+    super(message);
+    this.name = "AIServiceError";
+  }
+}
+
+export class AIServiceTimeoutError extends AIServiceError {
+  constructor(timeoutMs: number) {
+    super(`AI service request timed out after ${timeoutMs}ms`, 504, "AI_TIMEOUT");
+    this.name = "AIServiceTimeoutError";
+  }
+}
+
+// ─── Mock / Fallback Implementation ──────────────────────────────────────
+
+function mockDelay(ms: number = 300): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export class MockAIClient implements AIClient {
   async healthCheck() {
-    await mockDelay(100);
+    await mockDelay(50);
     return {
       ok: true,
-      service: "ai-service-mock",
+      service: "ai-service-fallback",
+      llmProvider: "deterministic-fallback",
     };
   }
 
   async allocate(request: AIAllocateRequest): Promise<AIAllocateResponse> {
-    await mockDelay(800);
+    await mockDelay(150);
 
     const ranked: AIRankingItem[] = request.requests.map((req, i) => ({
       requestId: req.id,
       userId: req.userId,
       rank: i + 1,
-      totalScore: Math.max(0.3, 1 - i * 0.15),
+      totalScore: Number(Math.max(0.2, 1 - i * 0.15).toFixed(4)),
       scoreBreakdown: {
-        usage: Math.max(0.1, 0.9 - i * 0.1),
-        waiting: Math.min(1, 0.3 + i * 0.1),
-        need: 0.6,
-        diversity: 0.5,
+        usage: Number(Math.max(0.1, 0.9 - (req.sessionsThisMonth ?? 0) * 0.1).toFixed(4)),
+        waiting: Number(Math.min(1, 0.2 + (req.waitingHours ?? 0) * 0.05).toFixed(4)),
+        need: Number(((req.projectNeedScore ?? 5) / 10).toFixed(4)),
+        diversity: req.isPriorityGroup ? 0.9 : 0.4,
       },
       studentReason:
         i === 0
           ? "Your request was prioritised based on fair-usage balance and project need."
-          : `You are #${i + 1} in the queue. Consider alternative time slots for faster access.`,
-      coordinatorSummary: `Ranked #${i + 1} by composite fairness score.`,
+          : `Contention queue position #${i + 1}. Consider alternative time slots for faster access.`,
+      coordinatorSummary: `Ranked #${i + 1} by fairness scoring heuristics.`,
       decidedBy: "scoring",
       tiedWith: [],
-      explanationSource: "mock",
+      explanationSource: "fallback",
     }));
 
-    const capacity = request.slot.capacity;
+    const capacity = request.slot.capacity ?? 1;
     return {
       allocated: ranked.slice(0, capacity),
       waitlist: ranked.slice(capacity),
@@ -171,114 +123,170 @@ export class MockAIClient implements AIClient {
         eligibleRequests: request.requests.length,
         excludedRequests: 0,
         capacity,
-        executionTimeMs: 42,
+        policyUsed: request.policy ?? {},
+        tieBreakInfo: {
+          tiedGroupsCount: 0,
+          totalTiedRequests: 0,
+          tiesDecided: [],
+          seedUsed: request.seed ?? "utilix",
+        },
+        executionTimeMs: 15,
       },
     };
   }
 
   async getAlternatives(
-    resourceId: string,
-    _slotId: string,
-    _userId: string,
-    _department: string,
+    request: AIAlternativesRequest,
   ): Promise<AIAlternativesResponse> {
-    await mockDelay(500);
+    await mockDelay(100);
+
+    const target = request.requestedSlot;
+    const limit = request.limit ?? 3;
+
+    // Filter available slots that are not the target
+    const candidates = request.availableSlots.filter((s) => s.id !== target.id);
 
     return {
-      alternatives: [
-        {
-          slot: {
-            id: `slot-${resourceId}-alt-1`,
-            resourceId,
-            resourceName: "Same resource",
-            startTime: "10:00",
-            endTime: "12:00",
-          },
-          scoreDiff: 0.15,
-          reason: "Morning slot with lower contention",
-        },
-        {
-          slot: {
-            id: `slot-${resourceId}-alt-2`,
-            resourceId,
-            resourceName: "Same resource",
-            startTime: "16:00",
-            endTime: "18:00",
-          },
-          scoreDiff: 0.08,
-          reason: "Late afternoon slot, typically available",
-        },
-      ],
+      alternatives: candidates.slice(0, limit).map((slot, i) => ({
+        slot,
+        scoreDiff: Number((0.05 * (i + 1)).toFixed(3)),
+        reason: `Alternative slot on ${slot.resourceName} with lower contention`,
+      })),
+    };
+  }
+
+  async bundle(request: AIBundleRequest): Promise<AIBundleResponse> {
+    await mockDelay(100);
+
+    const bundleSlots: AISlot[] = [];
+    for (const resId of request.resourceIds) {
+      const slots = request.slotsByResource[resId] ?? [];
+      if (slots.length > 0) {
+        bundleSlots.push(slots[0]);
+      }
+    }
+
+    return {
+      bundleSlots,
+      isComplete: bundleSlots.length === request.resourceIds.length,
+      reason:
+        bundleSlots.length === request.resourceIds.length
+          ? "Synchronous bundle schedule identified."
+          : "Could not find overlapping slots for all requested resources.",
     };
   }
 }
 
-// ─── HTTP Implementation (for when AI service is ready) ──────────────────
+// ─── Real HTTP FastAPI Client ────────────────────────────────────────────
 
 export class HttpAIClient implements AIClient {
   private baseUrl: string;
   private secret: string;
   private timeoutMs: number;
+  private fallback: MockAIClient;
 
   constructor() {
-    this.baseUrl = process.env.AI_SERVICE_URL ?? "http://localhost:8000";
+    this.baseUrl = (process.env.AI_SERVICE_URL ?? "http://localhost:8000").replace(/\/$/, "");
     this.secret = process.env.AI_SERVICE_SECRET ?? "";
-    this.timeoutMs = parseInt(
-      process.env.AI_SERVICE_TIMEOUT_MS ?? "6000",
-      10,
-    );
+    this.timeoutMs = parseInt(process.env.AI_SERVICE_TIMEOUT_MS ?? "6000", 10);
+    this.fallback = new MockAIClient();
   }
 
-  private async request<T>(path: string, body?: unknown): Promise<T> {
+  private async request<T>(path: string, body?: unknown, method: string = "POST"): Promise<T> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+
+      if (this.secret && this.secret !== "change-me") {
+        headers["X-AI-Secret"] = this.secret;
+        headers["Authorization"] = `Bearer ${this.secret}`;
+      }
+
       const res = await fetch(`${this.baseUrl}${path}`, {
-        method: body ? "POST" : "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.secret}`,
-        },
+        method,
+        headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });
 
       if (!res.ok) {
-        throw new Error(`AI service error: ${res.status} ${res.statusText}`);
+        const errText = await res.text().catch(() => "");
+        throw new AIServiceError(
+          `AI service HTTP ${res.status}: ${errText || res.statusText}`,
+          res.status,
+        );
       }
 
       return (await res.json()) as T;
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new AIServiceTimeoutError(this.timeoutMs);
+      }
+      if (err instanceof AIServiceError) {
+        throw err;
+      }
+      throw new AIServiceError(
+        err instanceof Error ? err.message : "Network error contacting AI service",
+      );
     } finally {
-      clearTimeout(timer);
+      clearTimeout(timeout);
     }
   }
 
   async healthCheck() {
-    return this.request<{ ok: boolean; service: string }>("/health");
+    try {
+      const data = await this.request<{
+        status: string;
+        service: string;
+        llmProvider: string;
+      }>("/health", undefined, "GET");
+      return {
+        ok: data.status === "healthy",
+        service: data.service,
+        llmProvider: data.llmProvider,
+      };
+    } catch {
+      return {
+        ok: false,
+        service: "unreachable",
+      };
+    }
   }
 
-  async allocate(request: AIAllocateRequest) {
-    return this.request<AIAllocateResponse>("/allocate", request);
+  async allocate(request: AIAllocateRequest): Promise<AIAllocateResponse> {
+    try {
+      return await this.request<AIAllocateResponse>("/allocate", request);
+    } catch (err) {
+      console.warn("[AIClient] /allocate call failed, using deterministic fallback:", err);
+      return this.fallback.allocate(request);
+    }
   }
 
   async getAlternatives(
-    resourceId: string,
-    slotId: string,
-    userId: string,
-    department: string,
-  ) {
-    return this.request<AIAlternativesResponse>("/alternatives", {
-      requestedSlot: { id: slotId, resourceId },
-      availableSlots: [],
-      userRequest: { id: "temp", userId, department, requestedSlotId: slotId },
-      limit: 3,
-    });
+    request: AIAlternativesRequest,
+  ): Promise<AIAlternativesResponse> {
+    try {
+      return await this.request<AIAlternativesResponse>("/alternatives", request);
+    } catch (err) {
+      console.warn("[AIClient] /alternatives call failed, using fallback:", err);
+      return this.fallback.getAlternatives(request);
+    }
+  }
+
+  async bundle(request: AIBundleRequest): Promise<AIBundleResponse> {
+    try {
+      return await this.request<AIBundleResponse>("/bundle", request);
+    } catch (err) {
+      console.warn("[AIClient] /bundle call failed, using fallback:", err);
+      return this.fallback.bundle(request);
+    }
   }
 }
 
 // ─── Export ──────────────────────────────────────────────────────────────
-// TODO: Switch to HttpAIClient when AI teammate confirms the endpoint.
-//       const aiClient: AIClient = new HttpAIClient();
 
-export const aiClient: AIClient = new MockAIClient();
+export const aiClient: AIClient = new HttpAIClient();

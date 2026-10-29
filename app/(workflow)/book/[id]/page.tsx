@@ -3,15 +3,13 @@
  * Owner B · app/(workflow)/book/[id]/page.tsx
  *
  * Core workflow: select slot → enter purpose/details → validate → submit
- * Shows processing, success, and error states.
- *
- * ⚠️ MOCK: Submissions are stored in memory only and will not survive
- *    a server restart.
+ * Shows processing, success, waitlisted, conflict, and error states.
  * ═══════════════════════════════════════════════════════════════════════════ */
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import type {
   Resource,
   BookingFormData,
@@ -22,12 +20,9 @@ import { validateBookingForm } from "../../_lib/validation";
 
 type PageState = "loading" | "form" | "submitting" | "success" | "error";
 
-export default function BookResourcePage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+function BookFormInner({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const searchParams = useSearchParams();
 
   const [pageState, setPageState] = useState<PageState>("loading");
   const [resource, setResource] = useState<Resource | null>(null);
@@ -35,35 +30,21 @@ export default function BookResourcePage({
   const [createdRequest, setCreatedRequest] = useState<BookingRequest | null>(
     null,
   );
+  const [isWaitlisted, setIsWaitlisted] = useState(false);
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>(
     [],
   );
 
-  // Form state — pre-populated from URL query params if available
-  const [formData, setFormData] = useState<BookingFormData>({
+  // Initialize form data directly from search parameters without useEffect setState
+  const [formData, setFormData] = useState<BookingFormData>(() => ({
     resourceId: id,
-    date: "",
-    startTime: "",
-    endTime: "",
+    date: searchParams.get("date") ?? "",
+    startTime: searchParams.get("start") ?? "",
+    endTime: searchParams.get("end") ?? "",
     purpose: "",
     notes: "",
     headcount: undefined,
-  });
-
-  // Read URL query params on mount
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const date = urlParams.get("date");
-    const start = urlParams.get("start");
-    const end = urlParams.get("end");
-
-    setFormData((prev) => ({
-      ...prev,
-      date: date ?? prev.date,
-      startTime: start ?? prev.startTime,
-      endTime: end ?? prev.endTime,
-    }));
-  }, []);
+  }));
 
   // Fetch resource details
   useEffect(() => {
@@ -77,37 +58,34 @@ export default function BookResourcePage({
           `/api/workflow/resources/${id}/slots?date=${dateStr}`,
         );
         const json = await res.json();
-        if (!json.success) throw new Error(json.error);
+        if (!json.success) {
+          throw new Error(json.error?.message || json.error || "Failed to load resource");
+        }
         setResource(json.data.resource);
         setPageState("form");
-      } catch {
+      } catch (err) {
         setPageState("error");
-        setSubmitError("Failed to load resource details.");
+        setSubmitError(err instanceof Error ? err.message : "Failed to load resource details.");
       }
     }
     fetchResource();
   }, [id]);
 
-  // Update a form field
   function updateField<K extends keyof BookingFormData>(
     key: K,
     value: BookingFormData[K],
   ) {
     setFormData((prev) => ({ ...prev, [key]: value }));
-    // Clear validation errors for this field on change
     setValidationErrors((prev) => prev.filter((e) => e.field !== key));
   }
 
-  // Get field error
   function fieldError(field: string): string | undefined {
     return validationErrors.find((e) => e.field === field)?.message;
   }
 
-  // Handle form submission
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    // Client-side validation
     const validation = validateBookingForm(formData, resource);
     if (!validation.valid) {
       setValidationErrors(validation.errors);
@@ -131,12 +109,29 @@ export default function BookResourcePage({
           setValidationErrors(json.errors);
           setPageState("form");
         } else {
-          throw new Error(json.error);
+          throw new Error(
+            json.error?.message || json.error || "Submission failed.",
+          );
         }
         return;
       }
 
-      setCreatedRequest(json.data);
+      const bookingData = json.data.booking ?? json.data;
+      setIsWaitlisted(Boolean(json.data.waitlisted));
+      setCreatedRequest({
+        id: bookingData.id,
+        resourceId: bookingData.resource_id ?? id,
+        resourceName: resource?.name ?? bookingData.resource_id ?? id,
+        userId: bookingData.user_id,
+        status: bookingData.status,
+        purpose: bookingData.purpose ?? formData.purpose,
+        date: formData.date,
+        startTime: formData.startTime,
+        endTime: formData.endTime,
+        costCredits: bookingData.cost_credits,
+        createdAt: bookingData.created_at,
+        updatedAt: bookingData.updated_at,
+      });
       setPageState("success");
     } catch (e) {
       setSubmitError(
@@ -146,7 +141,9 @@ export default function BookResourcePage({
     }
   }
 
-  // ── Loading State ──
+  const isSpace =
+    resource?.type === "studio" || resource?.type === "project_room";
+
   if (pageState === "loading") {
     return (
       <div className="flex items-center justify-center py-16">
@@ -158,7 +155,6 @@ export default function BookResourcePage({
     );
   }
 
-  // ── Submitting State ──
   if (pageState === "submitting") {
     return (
       <div className="max-w-2xl mx-auto mt-12">
@@ -168,27 +164,27 @@ export default function BookResourcePage({
             Processing your request…
           </h2>
           <p className="text-gray-500 text-sm">
-            ⚠️ Mock mode — this request will be stored in memory only.
+            Acquiring slot lock and evaluating allocation policy.
           </p>
         </div>
       </div>
     );
   }
 
-  // ── Success State ──
   if (pageState === "success" && createdRequest) {
     return (
       <div className="max-w-2xl mx-auto mt-12">
         <div className="bg-white rounded-xl border border-green-200 p-8 text-center">
-          <div className="text-5xl mb-4">✅</div>
+          <div className="text-5xl mb-4">{isWaitlisted ? "📋" : "✅"}</div>
           <h2 className="text-xl font-bold text-utilix-black mb-2">
-            Request Submitted!
+            {isWaitlisted ? "Added to Waitlist" : "Request Submitted!"}
           </h2>
           <p className="text-gray-600 mb-6">
-            Your booking request has been submitted and is pending review.
+            {isWaitlisted
+              ? "The requested slot is currently contested. You have been placed on the priority waitlist."
+              : "Your booking request has been locked and recorded under the active policy."}
           </p>
 
-          {/* Request Summary */}
           <div className="bg-utilix-cream rounded-lg p-4 text-left mb-6 text-sm">
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -197,9 +193,7 @@ export default function BookResourcePage({
               </div>
               <div>
                 <span className="text-gray-500">Status</span>
-                <p className="font-medium capitalize">
-                  {createdRequest.status}
-                </p>
+                <p className="font-medium capitalize">{createdRequest.status}</p>
               </div>
               <div>
                 <span className="text-gray-500">Resource</span>
@@ -217,13 +211,6 @@ export default function BookResourcePage({
                 <p className="font-medium">{createdRequest.purpose}</p>
               </div>
             </div>
-          </div>
-
-          {/* Mock notice */}
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3 text-sm text-yellow-800 mb-6">
-            ⚠️ <strong>Mock mode</strong> — This request is stored in memory
-            only and will not survive a server restart. It is not persisted to
-            any database.
           </div>
 
           <div className="flex gap-3 justify-center">
@@ -247,7 +234,6 @@ export default function BookResourcePage({
     );
   }
 
-  // ── Error State (non-validation) ──
   if (pageState === "error") {
     return (
       <div className="max-w-2xl mx-auto mt-12">
@@ -280,7 +266,6 @@ export default function BookResourcePage({
     );
   }
 
-  // ── Booking Form ──
   return (
     <div className="max-w-2xl mx-auto">
       <Link
@@ -295,11 +280,12 @@ export default function BookResourcePage({
           Book Resource
         </h1>
         {resource && (
-          <p className="text-gray-500 mb-6">{resource.name}</p>
+          <p className="text-gray-500 mb-6">
+            {resource.name} · {resource.location}
+          </p>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Date */}
           <div>
             <label className="block text-sm font-medium text-utilix-black mb-1">
               Date <span className="text-red-500">*</span>
@@ -317,13 +303,10 @@ export default function BookResourcePage({
                 }`}
             />
             {fieldError("date") && (
-              <p className="text-red-600 text-sm mt-1">
-                {fieldError("date")}
-              </p>
+              <p className="text-red-600 text-sm mt-1">{fieldError("date")}</p>
             )}
           </div>
 
-          {/* Time Range */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-utilix-black mb-1">
@@ -369,15 +352,12 @@ export default function BookResourcePage({
             </div>
           </div>
 
-          {/* Duration info */}
           {resource && (
-            <p className="text-xs text-gray-400">
-              Allowed duration: {resource.minDurationMinutes}–
-              {resource.maxDurationMinutes} minutes
+            <p className="text-xs text-gray-500">
+              Maximum session duration: {resource.max_session_minutes} minutes · Cost: {resource.credit_cost} credits
             </p>
           )}
 
-          {/* Purpose */}
           <div>
             <label className="block text-sm font-medium text-utilix-black mb-1">
               Purpose <span className="text-red-500">*</span>
@@ -401,7 +381,6 @@ export default function BookResourcePage({
             )}
           </div>
 
-          {/* Additional Notes */}
           <div>
             <label className="block text-sm font-medium text-utilix-black mb-1">
               Additional Details
@@ -417,16 +396,15 @@ export default function BookResourcePage({
             />
           </div>
 
-          {/* Headcount (for spaces) */}
-          {resource?.category === "space" && (
+          {isSpace && (
             <div>
               <label className="block text-sm font-medium text-utilix-black mb-1">
-                Number of People <span className="text-red-500">*</span>
+                Number of People
               </label>
               <input
                 type="number"
                 min={1}
-                max={resource.capacity}
+                max={50}
                 value={formData.headcount ?? ""}
                 onChange={(e) =>
                   updateField(
@@ -434,7 +412,7 @@ export default function BookResourcePage({
                     e.target.value ? parseInt(e.target.value, 10) : undefined,
                   )
                 }
-                placeholder={`Max ${resource.capacity} people`}
+                placeholder="Number of participants"
                 className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2
                   focus:ring-utilix-yellow ${
                     fieldError("headcount")
@@ -450,7 +428,6 @@ export default function BookResourcePage({
             </div>
           )}
 
-          {/* Resource status warning */}
           {resource && resource.status !== "available" && (
             <div className="bg-orange-50 border border-orange-200 rounded-lg px-4 py-3 text-sm text-orange-800">
               ⚠️ This resource is currently <strong>{resource.status}</strong>{" "}
@@ -458,13 +435,6 @@ export default function BookResourcePage({
             </div>
           )}
 
-          {/* Mock notice */}
-          <div className="bg-utilix-cream border border-yellow-200 rounded-lg px-4 py-3 text-sm text-yellow-800">
-            ⚠️ <strong>Mock mode</strong> — This booking will be stored in
-            memory only. It is not persisted to any database.
-          </div>
-
-          {/* Submit */}
           <button
             type="submit"
             disabled={resource?.status !== "available"}
@@ -477,5 +447,23 @@ export default function BookResourcePage({
         </form>
       </div>
     </div>
+  );
+}
+
+export default function BookResourcePage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-16">
+          <div className="w-8 h-8 border-3 border-utilix-yellow border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <BookFormInner params={params} />
+    </Suspense>
   );
 }

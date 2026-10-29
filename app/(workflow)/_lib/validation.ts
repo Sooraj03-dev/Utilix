@@ -93,35 +93,29 @@ export function validateBookingForm(
         const durationMins = endMins - startMins;
 
         if (resource) {
-          if (durationMins < resource.minDurationMinutes) {
+          const res = resource as unknown as Record<string, unknown>;
+          const minMins = typeof res.minDurationMinutes === "number" ? res.minDurationMinutes : 30;
+          const maxMins =
+            typeof res.max_session_minutes === "number"
+              ? res.max_session_minutes
+              : typeof res.maxDurationMinutes === "number"
+                ? res.maxDurationMinutes
+                : 240;
+
+          if (durationMins < minMins) {
             errors.push({
               field: "endTime",
-              message: `Minimum booking duration is ${resource.minDurationMinutes} minutes.`,
+              message: `Minimum booking duration is ${minMins} minutes.`,
             });
           }
-          if (durationMins > resource.maxDurationMinutes) {
+          if (durationMins > maxMins) {
             errors.push({
               field: "endTime",
-              message: `Maximum booking duration is ${resource.maxDurationMinutes} minutes (${Math.floor(resource.maxDurationMinutes / 60)}h).`,
+              message: `Maximum booking duration is ${maxMins} minutes (${Math.floor(maxMins / 60)}h).`,
             });
           }
         }
       }
-    }
-  }
-
-  // ── Space-specific: headcount ──
-  if (resource?.category === "space") {
-    if (!data.headcount || data.headcount < 1) {
-      errors.push({
-        field: "headcount",
-        message: "Number of people is required for space bookings.",
-      });
-    } else if (resource && data.headcount > resource.capacity) {
-      errors.push({
-        field: "headcount",
-        message: `Maximum capacity is ${resource.capacity} people.`,
-      });
     }
   }
 
@@ -135,4 +129,3 @@ export function validateBookingForm(
 
   return { valid: errors.length === 0, errors };
 }
-

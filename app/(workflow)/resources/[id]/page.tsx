@@ -4,17 +4,31 @@
  * ═══════════════════════════════════════════════════════════════════════════ */
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, Suspense } from "react";
 import Link from "next/link";
 import type { Resource, TimeSlot } from "../../_lib/types";
 
-export default function ResourceDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = use(params);
+function formatResourceType(type: string): string {
+  switch (type) {
+    case "printer_3d":
+      return "3D Printer";
+    case "arduino_kit":
+      return "Electronics Kit";
+    case "camera":
+      return "Camera";
+    case "studio":
+      return "Recording Studio";
+    case "project_room":
+      return "Project Room";
+    case "lab_instrument":
+      return "Lab Instrument";
+    default:
+      return type.replace(/_/g, " ");
+  }
+}
 
+function ResourceDetailContent({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const [resource, setResource] = useState<Resource | null>(null);
   const [slots, setSlots] = useState<TimeSlot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +50,7 @@ export default function ResourceDetailPage({
         );
         const json = await res.json();
 
-        if (!json.success) throw new Error(json.error);
+        if (!json.success) throw new Error(json.error?.message || json.error || "Failed to load slots");
         setResource(json.data.resource);
         setSlots(json.data.slots);
       } catch (e) {
@@ -77,10 +91,19 @@ export default function ResourceDetailPage({
 
   const statusColors: Record<string, string> = {
     available: "bg-green-100 text-green-800",
-    "in-use": "bg-blue-100 text-blue-800",
     maintenance: "bg-orange-100 text-orange-800",
     retired: "bg-gray-100 text-gray-500",
   };
+
+  const isSpace =
+    resource.type === "studio" || resource.type === "project_room";
+
+  const tags = [
+    formatResourceType(resource.type),
+    resource.restricted ? "Approval Required" : "Instant Allocation",
+    `${resource.credit_cost} credits`,
+    `Max ${resource.max_session_minutes} min`,
+  ];
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -99,7 +122,9 @@ export default function ResourceDetailPage({
             <h1 className="text-2xl font-bold text-utilix-black">
               {resource.name}
             </h1>
-            <p className="text-gray-500 mt-1">{resource.department}</p>
+            <p className="text-gray-500 mt-1 capitalize">
+              {resource.department_id.replace("dept_", "")} · {formatResourceType(resource.type)}
+            </p>
           </div>
           <span
             className={`px-3 py-1 rounded-full text-sm font-medium ${
@@ -110,8 +135,6 @@ export default function ResourceDetailPage({
           </span>
         </div>
 
-        <p className="text-gray-700 mb-4">{resource.description}</p>
-
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
           <div>
             <span className="text-gray-500 block">Location</span>
@@ -119,37 +142,34 @@ export default function ResourceDetailPage({
           </div>
           <div>
             <span className="text-gray-500 block">Category</span>
-            <span className="font-medium capitalize">{resource.category}</span>
+            <span className="font-medium capitalize">{isSpace ? "Space" : "Equipment"}</span>
           </div>
-          {resource.category === "space" && (
-            <div>
-              <span className="text-gray-500 block">Capacity</span>
-              <span className="font-medium">
-                {resource.capacity} people
-              </span>
-            </div>
-          )}
           <div>
-            <span className="text-gray-500 block">Booking Duration</span>
+            <span className="text-gray-500 block">Credit Cost</span>
+            <span className="font-medium">{resource.credit_cost} credits</span>
+          </div>
+          <div>
+            <span className="text-gray-500 block">Max Duration</span>
             <span className="font-medium">
-              {resource.minDurationMinutes}–{resource.maxDurationMinutes} min
+              {resource.max_session_minutes} minutes
             </span>
           </div>
         </div>
 
-        {resource.requiresTraining && (
+        {resource.requires_training && (
           <div className="mt-4 bg-orange-50 border border-orange-200 rounded-lg px-4 py-3 text-sm text-orange-800">
-            🎓 <strong>Training required</strong> — You must complete the
-            safety training before booking this resource.
+            🎓 <strong>Training required</strong> — You must complete the{" "}
+            <strong>{resource.requires_training.replace(/_/g, " ")}</strong> certification
+            before booking this resource.
           </div>
         )}
 
-        {/* Tags */}
+        {/* Badges */}
         <div className="flex flex-wrap gap-2 mt-4">
-          {resource.tags.map((tag) => (
+          {tags.map((tag) => (
             <span
               key={tag}
-              className="px-2.5 py-1 bg-utilix-cream text-utilix-black text-xs rounded-full"
+              className="px-2.5 py-1 bg-utilix-cream text-utilix-black text-xs rounded-full font-medium"
             >
               {tag}
             </span>
@@ -227,5 +247,23 @@ export default function ResourceDetailPage({
         )}
       </div>
     </div>
+  );
+}
+
+export default function ResourceDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-16">
+          <div className="w-8 h-8 border-3 border-utilix-yellow border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <ResourceDetailContent params={params} />
+    </Suspense>
   );
 }

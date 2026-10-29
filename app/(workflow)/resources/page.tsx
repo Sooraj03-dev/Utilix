@@ -29,7 +29,7 @@ export default function ResourcesPage() {
         const res = await fetch(`/api/workflow/resources?${params}`);
         const json = await res.json();
 
-        if (!json.success) throw new Error(json.error);
+        if (!json.success) throw new Error(json.error?.message || json.error || "Failed to load resources");
         setResources(json.data);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load resources");
@@ -38,7 +38,6 @@ export default function ResourcesPage() {
       }
     }
 
-    // Debounce search
     const timer = setTimeout(fetchResources, 300);
     return () => clearTimeout(timer);
   }, [category, search]);
@@ -51,7 +50,7 @@ export default function ResourcesPage() {
           Campus Resources
         </h1>
         <p className="text-gray-600 mt-1">
-          Browse and book equipment or spaces for your projects.
+          Browse and book equipment or spaces for your academic projects.
         </p>
       </div>
 
@@ -59,7 +58,7 @@ export default function ResourcesPage() {
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
         <input
           type="text"
-          placeholder="Search resources…"
+          placeholder="Search resources by name or location…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="flex-1 px-4 py-2 border border-gray-300 rounded-lg
@@ -129,13 +128,40 @@ export default function ResourcesPage() {
 
 // ─── Resource Card Component ─────────────────────────────────────────────
 
+function formatResourceType(type: string): string {
+  switch (type) {
+    case "printer_3d":
+      return "3D Printer";
+    case "arduino_kit":
+      return "Electronics Kit";
+    case "camera":
+      return "Camera";
+    case "studio":
+      return "Recording Studio";
+    case "project_room":
+      return "Project Room";
+    case "lab_instrument":
+      return "Lab Instrument";
+    default:
+      return type.replace(/_/g, " ");
+  }
+}
+
 function ResourceCard({ resource }: { resource: Resource }) {
   const statusColors: Record<string, string> = {
     available: "bg-green-100 text-green-800",
-    "in-use": "bg-blue-100 text-blue-800",
     maintenance: "bg-orange-100 text-orange-800",
     retired: "bg-gray-100 text-gray-500",
   };
+
+  const isSpace =
+    resource.type === "studio" || resource.type === "project_room";
+
+  const tags = [
+    formatResourceType(resource.type),
+    resource.restricted ? "Approval Needed" : "Direct Booking",
+    resource.credit_cost > 0 ? `${resource.credit_cost} credits` : "Free session",
+  ];
 
   return (
     <Link
@@ -150,7 +176,9 @@ function ResourceCard({ resource }: { resource: Resource }) {
           <h3 className="font-semibold text-utilix-black group-hover:text-utilix-yellow transition-colors truncate">
             {resource.name}
           </h3>
-          <p className="text-sm text-gray-500">{resource.department}</p>
+          <p className="text-sm text-gray-500 capitalize">
+            {resource.department_id.replace("dept_", "")} · {formatResourceType(resource.type)}
+          </p>
         </div>
         <span
           className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
@@ -161,43 +189,36 @@ function ResourceCard({ resource }: { resource: Resource }) {
         </span>
       </div>
 
-      {/* Description */}
-      <p className="text-sm text-gray-600 line-clamp-2 mb-3">
-        {resource.description}
-      </p>
-
-      {/* Meta */}
-      <div className="flex flex-wrap gap-2 text-xs text-gray-500">
+      {/* Meta info */}
+      <div className="flex flex-wrap gap-2 text-xs text-gray-500 mb-3">
         <span className="flex items-center gap-1">
           📍 {resource.location}
         </span>
-        {resource.category === "space" && (
+        <span className="flex items-center gap-1">
+          ⏱ Up to {resource.max_session_minutes}m
+        </span>
+        {isSpace && (
           <span className="flex items-center gap-1">
-            👥 Up to {resource.capacity}
+            👥 Space
           </span>
         )}
-        {resource.requiresTraining && (
+        {resource.requires_training && (
           <span className="flex items-center gap-1 text-orange-600">
-            🎓 Training required
+            🎓 Training: {resource.requires_training.replace(/_/g, " ")}
           </span>
         )}
       </div>
 
-      {/* Tags */}
+      {/* Badges / Tags */}
       <div className="flex flex-wrap gap-1.5 mt-3">
-        {resource.tags.slice(0, 3).map((tag) => (
+        {tags.map((tag) => (
           <span
             key={tag}
-            className="px-2 py-0.5 bg-utilix-cream text-utilix-black text-xs rounded-full"
+            className="px-2 py-0.5 bg-utilix-cream text-utilix-black text-xs rounded-full font-medium"
           >
             {tag}
           </span>
         ))}
-        {resource.tags.length > 3 && (
-          <span className="px-2 py-0.5 text-gray-400 text-xs">
-            +{resource.tags.length - 3} more
-          </span>
-        )}
       </div>
 
       {/* CTA */}

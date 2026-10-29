@@ -2,36 +2,34 @@
  * Request Detail Page — View a single booking request with full details,
  * status, AI explanation, and alternative suggestions.
  * Owner B · app/(workflow)/requests/[id]/page.tsx
- *
- * ⚠️ MOCK: Displays in-memory data only.
  * ═══════════════════════════════════════════════════════════════════════════ */
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, Suspense } from "react";
 import Link from "next/link";
-import type { BookingRequest, RequestStatus } from "../../_lib/types";
+import type { Booking, BookingStatus } from "../../_lib/types";
+import { canTransition } from "@/lib/types/status";
 
 const STATUS_STYLES: Record<
-  RequestStatus,
+  BookingStatus,
   { bg: string; text: string; label: string; icon: string }
 > = {
-  pending: { bg: "bg-yellow-100", text: "text-yellow-800", label: "Pending", icon: "⏳" },
-  approved: { bg: "bg-green-100", text: "text-green-800", label: "Approved", icon: "✅" },
-  rejected: { bg: "bg-red-100", text: "text-red-800", label: "Rejected", icon: "❌" },
+  submitted: { bg: "bg-yellow-100", text: "text-yellow-800", label: "Submitted", icon: "⏳" },
+  eligibility_passed: { bg: "bg-blue-100", text: "text-blue-800", label: "Eligibility Passed", icon: "✔️" },
+  allocated: { bg: "bg-indigo-100", text: "text-indigo-800", label: "Allocated", icon: "🎯" },
+  waitlisted: { bg: "bg-amber-100", text: "text-amber-800", label: "Waitlisted", icon: "📋" },
+  pending_approval: { bg: "bg-orange-100", text: "text-orange-800", label: "Pending Approval", icon: "⏳" },
+  confirmed: { bg: "bg-green-100", text: "text-green-800", label: "Confirmed", icon: "✅" },
+  checked_out: { bg: "bg-purple-100", text: "text-purple-800", label: "Checked Out", icon: "📦" },
+  returned: { bg: "bg-teal-100", text: "text-teal-800", label: "Returned", icon: "🔄" },
   cancelled: { bg: "bg-gray-100", text: "text-gray-600", label: "Cancelled", icon: "🚫" },
-  waitlisted: { bg: "bg-blue-100", text: "text-blue-800", label: "Waitlisted", icon: "📋" },
-  "checked-out": { bg: "bg-purple-100", text: "text-purple-800", label: "Checked Out", icon: "📦" },
-  returned: { bg: "bg-gray-100", text: "text-gray-600", label: "Returned", icon: "✔️" },
+  rejected: { bg: "bg-red-100", text: "text-red-800", label: "Rejected", icon: "❌" },
+  no_show: { bg: "bg-rose-100", text: "text-rose-800", label: "No Show", icon: "⚠️" },
 };
 
-export default function RequestDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+function RequestDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-
-  const [request, setRequest] = useState<BookingRequest | null>(null);
+  const [request, setRequest] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -43,7 +41,7 @@ export default function RequestDetailPage({
       try {
         const res = await fetch(`/api/workflow/requests/${id}`);
         const json = await res.json();
-        if (!json.success) throw new Error(json.error);
+        if (!json.success) throw new Error(json.error?.message || json.error || "Failed to load request");
         setRequest(json.data);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Request not found");
@@ -55,15 +53,15 @@ export default function RequestDetailPage({
   }, [id]);
 
   async function handleCancel() {
-    if (!confirm("Are you sure you want to cancel this request?")) return;
+    if (!confirm("Are you sure you want to cancel this booking?")) return;
     setCancelling(true);
     try {
       const res = await fetch(`/api/workflow/requests/${id}/cancel`, {
         method: "POST",
       });
       const json = await res.json();
-      if (!json.success) throw new Error(json.error);
-      setRequest(json.data);
+      if (!json.success) throw new Error(json.error?.message || json.error || "Failed to cancel request");
+      setRequest(json.data.booking ?? json.data);
     } catch (e) {
       alert(e instanceof Error ? e.message : "Failed to cancel request");
     } finally {
@@ -99,8 +97,12 @@ export default function RequestDetailPage({
     );
   }
 
-  const style = STATUS_STYLES[request.status] ?? STATUS_STYLES.pending;
-  const canCancel = ["pending", "waitlisted"].includes(request.status);
+  const style = STATUS_STYLES[request.status] ?? STATUS_STYLES.submitted;
+  const isCancellable = canTransition(request.status, "cancelled");
+
+  const date = request.slot_start ? request.slot_start.split("T")[0] : "";
+  const startTime = request.slot_start ? request.slot_start.slice(11, 16) : "";
+  const endTime = request.slot_end ? request.slot_end.slice(11, 16) : "";
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -112,20 +114,16 @@ export default function RequestDetailPage({
       </Link>
 
       {/* Status Banner */}
-      <div
-        className={`rounded-xl p-5 mb-6 ${style.bg} border border-opacity-30`}
-      >
+      <div className={`rounded-xl p-5 mb-6 ${style.bg} border border-opacity-30`}>
         <div className="flex items-center gap-3">
           <span className="text-2xl">{style.icon}</span>
           <div>
             <h2 className={`text-lg font-bold ${style.text}`}>
               {style.label}
             </h2>
-            {request.rank != null && (
-              <p className={`text-sm ${style.text} opacity-80`}>
-                Ranked #{request.rank} by AI allocation
-              </p>
-            )}
+            <p className={`text-sm ${style.text} opacity-80`}>
+              Policy Version: {request.policy_version} · Credits: {request.cost_credits}
+            </p>
           </div>
         </div>
       </div>
@@ -133,38 +131,36 @@ export default function RequestDetailPage({
       {/* Request Details */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
         <h1 className="text-xl font-bold text-utilix-black mb-4">
-          {request.resourceName}
+          Booking for {request.resource_id}
         </h1>
 
         <div className="grid grid-cols-2 gap-4 text-sm mb-6">
           <div>
-            <span className="text-gray-500 block">Request ID</span>
+            <span className="text-gray-500 block">Booking ID</span>
             <span className="font-mono font-medium">{request.id}</span>
           </div>
           <div>
             <span className="text-gray-500 block">Date</span>
-            <span className="font-medium">{request.date}</span>
+            <span className="font-medium">{date}</span>
           </div>
           <div>
             <span className="text-gray-500 block">Time</span>
             <span className="font-medium">
-              {request.startTime} – {request.endTime}
+              {startTime} – {endTime}
             </span>
           </div>
           <div>
-            <span className="text-gray-500 block">Department</span>
-            <span className="font-medium">{request.department}</span>
+            <span className="text-gray-500 block">User ID</span>
+            <span className="font-medium">{request.user_id}</span>
           </div>
-          {request.headcount != null && (
-            <div>
-              <span className="text-gray-500 block">Headcount</span>
-              <span className="font-medium">{request.headcount} people</span>
-            </div>
-          )}
+          <div>
+            <span className="text-gray-500 block">Credits Charged</span>
+            <span className="font-medium">{request.cost_credits} credits</span>
+          </div>
           <div>
             <span className="text-gray-500 block">Submitted</span>
             <span className="font-medium">
-              {new Date(request.createdAt).toLocaleString()}
+              {new Date(request.created_at).toLocaleString()}
             </span>
           </div>
         </div>
@@ -174,76 +170,21 @@ export default function RequestDetailPage({
           <p className="text-utilix-black">{request.purpose}</p>
         </div>
 
-        {request.notes && (
+        {request.decision_reason && (
           <div className="border-t border-gray-100 pt-4 mt-4">
             <h3 className="text-sm font-medium text-gray-500 mb-1">
-              Additional Details
+              Decision Reason
             </h3>
-            <p className="text-gray-700">{request.notes}</p>
-          </div>
-        )}
-
-        {request.rejectionReason && (
-          <div className="border-t border-gray-100 pt-4 mt-4">
-            <h3 className="text-sm font-medium text-red-500 mb-1">
-              Rejection Reason
-            </h3>
-            <p className="text-red-700">{request.rejectionReason}</p>
+            <p className="text-gray-700 bg-gray-50 p-3 rounded-lg text-sm">
+              {request.decision_reason}
+            </p>
           </div>
         )}
       </div>
 
-      {/* AI Explanation */}
-      {request.studentExplanation && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold text-utilix-black mb-3 flex items-center gap-2">
-            <span className="text-utilix-yellow">🤖</span> AI Allocation
-            Explanation
-          </h2>
-          <p className="text-gray-700">{request.studentExplanation}</p>
-          <p className="text-xs text-gray-400 mt-3">
-            Generated by AI fairness engine · explanation source: mock
-          </p>
-        </div>
-      )}
-
-      {/* Alternative Suggestions */}
-      {request.alternatives && request.alternatives.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold text-utilix-black mb-3 flex items-center gap-2">
-            💡 Suggested Alternatives
-          </h2>
-          <div className="space-y-3">
-            {request.alternatives.map((alt, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between border border-gray-100 rounded-lg p-4 hover:border-utilix-yellow transition-colors"
-              >
-                <div>
-                  <p className="font-medium text-utilix-black text-sm">
-                    {alt.resourceName}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {alt.date} · {alt.startTime}–{alt.endTime}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">{alt.reason}</p>
-                </div>
-                <Link
-                  href={`/book/${alt.resourceId}?date=${alt.date}&start=${alt.startTime}&end=${alt.endTime}`}
-                  className="bg-utilix-cream text-utilix-black text-sm font-medium px-4 py-2
-                             rounded-lg hover:bg-utilix-yellow transition-colors whitespace-nowrap"
-                >
-                  Book This
-                </Link>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Actions */}
       <div className="flex gap-3">
-        {canCancel && (
+        {isCancellable && (
           <button
             onClick={handleCancel}
             disabled={cancelling}
@@ -251,7 +192,7 @@ export default function RequestDetailPage({
                        border border-red-200 hover:bg-red-100 transition-colors text-sm
                        disabled:opacity-50"
           >
-            {cancelling ? "Cancelling…" : "Cancel Request"}
+            {cancelling ? "Cancelling…" : "Cancel Booking"}
           </button>
         )}
         <Link
@@ -262,11 +203,24 @@ export default function RequestDetailPage({
           Browse Resources
         </Link>
       </div>
-
-      {/* Mock notice */}
-      <div className="mt-6 text-center text-xs text-gray-400">
-        ⚠️ Mock mode — displaying in-memory data only
-      </div>
     </div>
+  );
+}
+
+export default function RequestDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-16">
+          <div className="w-8 h-8 border-3 border-utilix-yellow border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <RequestDetailContent params={params} />
+    </Suspense>
   );
 }

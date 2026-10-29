@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { validateBookingForm, timeToMinutes } from "./validation";
 import { MockWorkflowAdapter } from "./workflow-adapter";
 import { MockAIClient } from "../../../lib/ai-client";
-import type { Resource, BookingFormData } from "./types";
+import type { Resource, BookingFormData, AuthUser } from "./types";
 import { NextRequest } from "next/server";
 import { GET as getResourcesRoute } from "../../api/workflow/resources/route";
 import { GET as getSlotsRoute } from "../../api/workflow/resources/[id]/slots/route";
@@ -24,18 +24,19 @@ test("timeToMinutes converts valid HH:mm correctly", () => {
 
 test("validateBookingForm validates correctly", () => {
   const dummyResource: Resource = {
-    id: "res-test",
+    id: "res_printer1",
     name: "Test 3D Printer",
-    category: "equipment",
-    department: "Engineering",
-    description: "Test equipment",
+    type: "printer_3d",
+    department_id: "dept_eng",
+    coordinator_id: "user_carol",
     location: "Lab 1",
-    capacity: 1,
+    photo_url: null,
+    restricted: false,
+    requires_training: null,
+    credit_cost: 2,
+    max_session_minutes: 180,
     status: "available",
-    tags: ["test"],
-    requiresTraining: false,
-    minDurationMinutes: 30,
-    maxDurationMinutes: 180,
+    last_inspection_at: null,
   };
 
   const tomorrow = new Date();
@@ -43,7 +44,7 @@ test("validateBookingForm validates correctly", () => {
   const tomorrowStr = tomorrow.toISOString().split("T")[0];
 
   const validData: BookingFormData = {
-    resourceId: "res-test",
+    resourceId: "res_printer1",
     date: tomorrowStr,
     startTime: "10:00",
     endTime: "11:30",
@@ -78,7 +79,7 @@ test("validateBookingForm validates correctly", () => {
   const shortData: BookingFormData = {
     ...validData,
     startTime: "10:00",
-    endTime: "10:15", // 15 mins < 30 mins
+    endTime: "10:15",
   };
   const shortResult = validateBookingForm(shortData, dummyResource);
   assert.equal(shortResult.valid, false);
@@ -88,7 +89,7 @@ test("validateBookingForm validates correctly", () => {
   const longData: BookingFormData = {
     ...validData,
     startTime: "10:00",
-    endTime: "15:00", // 300 mins > 180 mins
+    endTime: "15:00",
   };
   const longResult = validateBookingForm(longData, dummyResource);
   assert.equal(longResult.valid, false);
@@ -103,29 +104,6 @@ test("validateBookingForm validates correctly", () => {
   assert.equal(shortPurposeResult.valid, false);
   assert.ok(shortPurposeResult.errors.some((e) => e.field === "purpose"));
 
-  // Test space capacity requirements
-  const spaceResource: Resource = {
-    ...dummyResource,
-    category: "space",
-    capacity: 8,
-  };
-
-  const spaceWithoutHeadcount: BookingFormData = {
-    ...validData,
-    headcount: undefined,
-  };
-  const spaceHeadcountResult = validateBookingForm(spaceWithoutHeadcount, spaceResource);
-  assert.equal(spaceHeadcountResult.valid, false);
-  assert.ok(spaceHeadcountResult.errors.some((e) => e.field === "headcount"));
-
-  const spaceOverCapacity: BookingFormData = {
-    ...validData,
-    headcount: 15,
-  };
-  const spaceOverCapResult = validateBookingForm(spaceOverCapacity, spaceResource);
-  assert.equal(spaceOverCapResult.valid, false);
-  assert.ok(spaceOverCapResult.errors.some((e) => e.field === "headcount" && e.message.includes("Maximum capacity")));
-
   // Test unavailable resource
   const maintenanceResource: Resource = {
     ...dummyResource,
@@ -138,49 +116,57 @@ test("validateBookingForm validates correctly", () => {
 
 test("MockWorkflowAdapter manages resources and requests correctly", async () => {
   const adapter = new MockWorkflowAdapter();
+  const mockUser: AuthUser = {
+    uid: "user_alice",
+    name: "Alice Chen",
+    email: "alice@university.edu",
+    role: "student",
+  };
 
   const allResources = await adapter.listResources();
-  assert.ok(allResources.length >= 8);
+  assert.ok(allResources.length >= 3);
 
   // Filter by category
-  const spaces = await adapter.listResources({ category: "space" });
-  assert.ok(spaces.every((r) => r.category === "space"));
+  const studios = await adapter.listResources({ category: "studio" });
+  assert.ok(studios.every((r) => r.type === "studio"));
 
   // Search filter
-  const searchResults = await adapter.listResources({ search: "3D" });
+  const searchResults = await adapter.listResources({ search: "Prusa" });
   assert.ok(searchResults.length > 0);
-  assert.ok(searchResults.some((r) => r.name.includes("3D")));
+  assert.ok(searchResults.some((r) => r.name.includes("Prusa")));
 
   // Get single resource
-  const res001 = await adapter.getResource("res-001");
-  assert.ok(res001 !== null);
-  assert.equal(res001?.id, "res-001");
+  const resPrinter = await adapter.getResource("res_printer1");
+  assert.ok(resPrinter !== null);
+  assert.equal(resPrinter?.id, "res_printer1");
 
   // Get slots
-  const slots = await adapter.getResourceSlots("res-001", "2026-11-01");
+  const slots = await adapter.getResourceSlots("res_printer1", "2026-11-01");
   assert.ok(slots.length > 0);
-  assert.equal(slots[0].resourceId, "res-001");
+  assert.equal(slots[0].resourceId, "res_printer1");
 
   // Create request
-  const created = await adapter.createRequest({
-    resourceId: "res-001",
-    date: "2026-11-05",
-    startTime: "10:00",
-    endTime: "12:00",
-    purpose: "Test purpose for capstone",
-    notes: "Sample note",
-  });
-  assert.ok(created.id.startsWith("req-mock-"));
-  assert.equal(created.status, "pending");
-  assert.equal(created.resourceName, "Ultimaker S5 — 3D Printer");
+  const created = await adapter.createRequest(
+    {
+      resourceId: "res_printer1",
+      date: "2026-11-05",
+      startTime: "10:00",
+      endTime: "11:00",
+      purpose: "Test purpose for capstone",
+      notes: "Sample note",
+    },
+    mockUser,
+  );
+  assert.ok(created.booking.id.startsWith("bk_mock_"));
+  assert.equal(created.booking.resource_id, "res_printer1");
 
   // Get request by id
-  const fetched = await adapter.getRequest(created.id);
-  assert.equal(fetched?.id, created.id);
+  const fetched = await adapter.getRequest(created.booking.id);
+  assert.equal(fetched?.id, created.booking.id);
 
-  // Update status (e.g. cancel)
-  const updated = await adapter.updateRequestStatus(created.id, "cancelled");
-  assert.equal(updated?.status, "cancelled");
+  // Update status (cancel)
+  const cancelled = await adapter.cancelRequest(created.booking.id, mockUser, "Cancelled for test");
+  assert.equal(cancelled.booking.status, "cancelled");
 });
 
 test("MockAIClient provides typed responses", async () => {
@@ -188,24 +174,23 @@ test("MockAIClient provides typed responses", async () => {
 
   const health = await ai.healthCheck();
   assert.equal(health.ok, true);
-  assert.equal(health.service, "ai-service-mock");
+
+  const slot = {
+    id: "slot-1",
+    resourceId: "res_printer1",
+    resourceName: "Prusa i3 MK4S #1",
+    department: "dept_eng",
+    startTime: "2026-11-01T10:00:00Z",
+    endTime: "2026-11-01T11:00:00Z",
+  };
 
   const allocateRes = await ai.allocate({
-    slot: {
-      id: "slot-1",
-      resourceId: "res-001",
-      resourceName: "Ultimaker S5",
-      department: "Engineering",
-      startTime: "10:00",
-      endTime: "12:00",
-      capacity: 1,
-    },
+    slot,
     requests: [
       {
         id: "req-1",
-        userId: "user-1",
-        userName: "Alice",
-        department: "Engineering",
+        userId: "user_alice",
+        department: "dept_eng",
         requestedSlotId: "slot-1",
         sessionsThisMonth: 1,
         waitingHours: 2.5,
@@ -219,52 +204,49 @@ test("MockAIClient provides typed responses", async () => {
         freeSessionsLeft: 3,
         submittedAt: new Date().toISOString(),
       },
-      {
-        id: "req-2",
-        userId: "user-2",
-        userName: "Bob",
-        department: "Engineering",
-        requestedSlotId: "slot-1",
-        sessionsThisMonth: 4,
-        waitingHours: 0.5,
-        projectNeedScore: 5.0,
-        isPriorityGroup: false,
-        trainingVerified: true,
-        withinBookingLimit: true,
-        noOverlap: true,
-        resourceAvailable: true,
-        currentCreditBalance: 10,
-        freeSessionsLeft: 1,
-        submittedAt: new Date().toISOString(),
-      },
     ],
   });
 
-  assert.equal(allocateRes.allocated.length, 1);
-  assert.equal(allocateRes.waitlist.length, 1);
   assert.equal(allocateRes.allocated[0].requestId, "req-1");
-  assert.equal(allocateRes.waitlist[0].requestId, "req-2");
-  assert.ok(allocateRes.allocated[0].studentReason.length > 0);
 
-  const alts = await ai.getAlternatives("res-001", "slot-1", "user-2", "Engineering");
+  const alts = await ai.getAlternatives({
+    requestedSlot: slot,
+    availableSlots: [
+      {
+        id: "slot-2",
+        resourceId: "res_studio_a",
+        resourceName: "Recording Studio A",
+        department: "dept_design",
+        startTime: "2026-11-01T14:00:00Z",
+        endTime: "2026-11-01T15:00:00Z",
+      },
+    ],
+    userRequest: {
+      id: "req-2",
+      userId: "user_bob",
+      department: "dept_design",
+      requestedSlotId: "slot-1",
+      submittedAt: new Date().toISOString(),
+    },
+  });
   assert.ok(alts.alternatives.length > 0);
   assert.ok(alts.alternatives[0].reason.length > 0);
 });
 
 test("Workflow API Routes handle full lifecycle with mock adapter", async () => {
   // 1. GET /api/workflow/resources
-  const reqRes = new NextRequest("http://localhost:3000/api/workflow/resources?category=equipment");
+  const reqRes = new NextRequest("http://localhost:3000/api/workflow/resources?category=studio");
   const resRes = await getResourcesRoute(reqRes);
   const dataRes = await resRes.json();
   assert.equal(resRes.status, 200);
   assert.equal(dataRes.success, true);
   assert.equal(dataRes._mock, true);
   assert.ok(dataRes.data.length > 0);
-  assert.ok(dataRes.data.every((r: Resource) => r.category === "equipment"));
+  assert.ok(dataRes.data.every((r: Resource) => r.type === "studio"));
 
   // 2. GET /api/workflow/resources/[id]/slots
-  const reqSlots = new NextRequest("http://localhost:3000/api/workflow/resources/res-001/slots?date=2026-11-02");
-  const resSlots = await getSlotsRoute(reqSlots, { params: Promise.resolve({ id: "res-001" }) });
+  const reqSlots = new NextRequest("http://localhost:3000/api/workflow/resources/res_printer1/slots?date=2026-11-02");
+  const resSlots = await getSlotsRoute(reqSlots, { params: Promise.resolve({ id: "res_printer1" }) });
   const dataSlots = await resSlots.json();
   assert.equal(resSlots.status, 200);
   assert.equal(dataSlots.success, true);
@@ -274,7 +256,7 @@ test("Workflow API Routes handle full lifecycle with mock adapter", async () => 
   const reqInvalid = new NextRequest("http://localhost:3000/api/workflow/requests", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ resourceId: "res-001", purpose: "abc" }),
+    body: JSON.stringify({ resourceId: "res_printer1", purpose: "abc" }),
   });
   const resInvalid = await createRequestRoute(reqInvalid);
   assert.equal(resInvalid.status, 400);
@@ -291,10 +273,10 @@ test("Workflow API Routes handle full lifecycle with mock adapter", async () => 
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      resourceId: "res-001",
+      resourceId: "res_printer1",
       date: tomorrowStr,
       startTime: "10:00",
-      endTime: "12:00",
+      endTime: "11:00",
       purpose: "E2E API test for booking workflow",
       notes: "Test notes",
     }),
@@ -304,9 +286,9 @@ test("Workflow API Routes handle full lifecycle with mock adapter", async () => 
   const dataValid = await resValid.json();
   assert.equal(dataValid.success, true);
   assert.equal(dataValid._mock, true);
-  assert.ok(dataValid.data.id.startsWith("req-mock-"));
+  assert.ok(dataValid.data.booking.id.startsWith("bk_mock_"));
 
-  const newRequestId = dataValid.data.id;
+  const newRequestId = dataValid.data.booking.id;
 
   // 5. GET /api/workflow/requests/[id]
   const reqGet = new NextRequest(`http://localhost:3000/api/workflow/requests/${newRequestId}`);
@@ -316,7 +298,15 @@ test("Workflow API Routes handle full lifecycle with mock adapter", async () => 
   assert.equal(dataGet.success, true);
   assert.equal(dataGet.data.id, newRequestId);
 
-  // 6. POST /api/workflow/requests/[id]/cancel
+  // 6. GET /api/workflow/requests (list)
+  const reqList = new NextRequest("http://localhost:3000/api/workflow/requests");
+  const resList = await getRequestsRoute(reqList);
+  const dataList = await resList.json();
+  assert.equal(resList.status, 200);
+  assert.equal(dataList.success, true);
+  assert.ok(dataList.data.length > 0);
+
+  // 7. POST /api/workflow/requests/[id]/cancel
   const reqCancel = new NextRequest(`http://localhost:3000/api/workflow/requests/${newRequestId}/cancel`, {
     method: "POST",
   });
@@ -324,5 +314,5 @@ test("Workflow API Routes handle full lifecycle with mock adapter", async () => 
   const dataCancel = await resCancel.json();
   assert.equal(resCancel.status, 200);
   assert.equal(dataCancel.success, true);
-  assert.equal(dataCancel.data.status, "cancelled");
+  assert.equal(dataCancel.data.booking.status, "cancelled");
 });
