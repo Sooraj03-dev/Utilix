@@ -92,6 +92,7 @@ async function upsertFirebaseData(target: SeedTarget): Promise<void> {
           uid: user.id,
           email: user.email,
           displayName: user.displayName,
+          password: process.env.DEFAULT_SEED_PASSWORD || "UtilixPassword2026!",
           emailVerified: true,
         }).catch(() => null);
       }
@@ -134,6 +135,26 @@ async function upsertFirebaseData(target: SeedTarget): Promise<void> {
       last_inspection_at: nowISO,
     };
     await db.collection(COLLECTIONS.resources).doc(res.id).set(firestoreResource, { merge: true });
+  }
+
+  // 3b. Seed Availability Windows
+  for (const res of dataset.resources) {
+    for (let day = 1; day <= 5; day++) {
+      const winId = `win_${res.id}_day${day}`;
+      const winData = {
+        id: winId,
+        resource_id: res.id,
+        weekday: day,
+        date: null,
+        start: "09:00",
+        end: "18:00",
+        capacity: res.totalUnits || 1,
+        slot_type: "credit",
+        effective_from: "2026-01-01",
+        effective_to: "2027-01-01",
+      };
+      await db.collection(COLLECTIONS.availability_windows).doc(winId).set(winData, { merge: true });
+    }
   }
 
   // 4. Seed Policies
@@ -239,10 +260,9 @@ export async function runSeed(target: SeedTarget): Promise<void> {
   await upsertFirebaseData(target);
 }
 
-if (require.main === module) {
-  const target = (process.env.SEED_TARGET ?? "mock") as SeedTarget;
-  runSeed(target).catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
-}
+const cliArg = process.argv[2] as SeedTarget | undefined;
+const target = (cliArg ?? process.env.SEED_TARGET ?? "mock") as SeedTarget;
+runSeed(target).catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

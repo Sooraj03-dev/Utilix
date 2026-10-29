@@ -57,6 +57,20 @@ The authoritative Firestore collections are:
 
 In the Firebase Console:
 1. Navigate to **Authentication** > **Sign-in method**.
-2. Enable **Email/Password** provider.
-3. Ensure the authorized domains include `localhost` and your staging domain.
+2. Enable **Email/Password** provider (now enabled).
+3. Ensure authorized domains include `localhost` and your staging domain.
 4. Users logging in are verified directly through Firebase Auth, generating secure session cookies.
+
+## 5. Seeded Test Accounts in Firebase Auth & Firestore
+
+All test accounts have been created in Firebase Authentication and populated in Firestore with password: `UtilixPassword2026!`
+
+| Role | Email | Password | UID | Notes |
+|---|---|---|---|---|
+| **Student** | `student01@utilix.local` | `UtilixPassword2026!` | `student-01` | Active, 20 credits, certified |
+| **Student** | `student02@utilix.local` | `UtilixPassword2026!` | `student-02` | Active, 25 credits |
+| **Student** | `student03@utilix.local` | `UtilixPassword2026!` | `student-03` | Active, DSLR certified |
+| **Coordinator** | `coord-lab@utilix.local` | `UtilixPassword2026!` | `coordinator-01` | Lab & Equipment coordinator |
+| **Coordinator** | `coord-media@utilix.local` | `UtilixPassword2026!` | `coordinator-02` | Media & Studio coordinator |
+| **Coordinator** | `coord-makerspace@utilix.local` | `UtilixPassword2026!` | `coordinator-03` | 3D Printer & Makerspace coordinator |
+| **Admin** | `admin-platform@utilix.local` | `UtilixPassword2026!` | `admin-01` | Full institutional administrator |
