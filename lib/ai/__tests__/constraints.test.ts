@@ -42,6 +42,15 @@ describe("constraints.ts", () => {
     expect(result.exclusion).toBeUndefined();
   });
 
+  it("excludes request when slotType is free and freeSessionsLeft is 0", () => {
+    const req = { ...baseRequest, freeSessionsLeft: 0 };
+    const result = checkConstraints(req, baseSlot, DEFAULT_POLICY);
+    expect(result.valid).toBe(false);
+    expect(result.creditCharge).toBe(0);
+    expect(result.exclusion?.code).toBe("INSUFFICIENT_CREDITS");
+    expect(result.exclusion?.studentReason).toContain("used all your free sessions");
+  });
+
   it("excludes request when trainingOk is false (TRAINING_MISSING)", () => {
     const req = {
       ...baseRequest,
@@ -82,7 +91,7 @@ describe("constraints.ts", () => {
     expect(result.exclusion?.code).toBe("OVERLAP");
   });
 
-  it("charges credits when free sessions are exhausted or slot is credit type", () => {
+  it("charges credits when slot is credit type", () => {
     const creditSlot: Slot = {
       ...baseSlot,
       slotType: "credit",

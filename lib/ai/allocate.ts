@@ -25,6 +25,11 @@ export function allocateRequests(
   const capacity = slot.capacity ?? 1;
   const seed = input.seed ?? `${slot.id}:${policy.version}`;
 
+  // Promotion mode note:
+  // When an existing booking is cancelled, the caller submits mode: "promotion" with the
+  // currently waitlisted requests. The engine intentionally applies the exact same ranking,
+  // scoring, and fairness rules as new requests to promote the top candidate and re-rank the rest.
+
   const excluded: ExcludedRequest[] = [];
   const validCandidates: Array<{
     request: (typeof input.requests)[number];

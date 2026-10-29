@@ -119,6 +119,7 @@ Ranks competing requests for a given equipment slot.
   ]
 }
 ```
+*Note on `mode`: Use `"new_requests"` for initial batch allocations. When an existing reservation is cancelled, call with `mode: "promotion"` passing current waitlisted requests; the engine applies the same fair ranking rules to promote the top candidate and re-rank the rest.*
 
 ### 2. `GET /api/ai/health`
 Health & LLM configuration status.

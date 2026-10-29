@@ -81,9 +81,25 @@ export function checkConstraints(
 
   // 5. Cost & Credit Check
   let creditCharge = 0;
-  if (slot.slotType === "free" && request.freeSessionsLeft > 0) {
-    creditCharge = 0;
+  if (slot.slotType === "free") {
+    if (request.freeSessionsLeft > 0) {
+      creditCharge = 0;
+    } else {
+      return {
+        valid: false,
+        creditCharge: 0,
+        exclusion: {
+          requestId: request.requestId,
+          decision: "excluded",
+          code: "INSUFFICIENT_CREDITS",
+          message: "You have used all your free sessions for this week.",
+          studentReason:
+            "You have used all your free sessions for this week. Choose a credit slot or wait until free sessions reset.",
+        },
+      };
+    }
   } else {
+    // slot.slotType === "credit"
     creditCharge = slot.creditCost > 0 ? slot.creditCost : policy.defaultCreditCost;
     if (request.creditsAvailable < creditCharge) {
       return {

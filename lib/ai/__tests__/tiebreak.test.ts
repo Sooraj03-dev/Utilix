@@ -62,4 +62,19 @@ describe("tiebreak.ts", () => {
     expect(run1.tieBreakInfo.decidedBy).toBe("seededLottery");
     expect(run1.tieBreakInfo.seed).toBe("fixed-seed-42");
   });
+
+  it("only marks contiguous tied candidates in tiedRequestIds", () => {
+    const c1 = makeCandidate("req-High", 0.95, 0, "2026-10-29T10:00:00Z");
+    const c2 = makeCandidate("req-Tie1", 0.70, 2, "2026-10-29T10:00:00Z");
+    const c3 = makeCandidate("req-Tie2", 0.70, 1, "2026-10-29T10:00:00Z");
+    const c4 = makeCandidate("req-Low", 0.30, 5, "2026-10-29T10:00:00Z");
+
+    const result = sortAndResolveTies([c1, c2, c3, c4], DEFAULT_POLICY, "seed-distinct");
+    expect(result.tieBreakInfo.used).toBe(true);
+    expect(result.tieBreakInfo.tiedRequestIds.sort()).toEqual(["req-Tie1", "req-Tie2"]);
+    expect(result.sorted[0].request.requestId).toBe("req-High");
+    expect(result.sorted[1].request.requestId).toBe("req-Tie2");
+    expect(result.sorted[2].request.requestId).toBe("req-Tie1");
+    expect(result.sorted[3].request.requestId).toBe("req-Low");
+  });
 });

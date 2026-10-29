@@ -44,47 +44,72 @@ export function sortAndResolveTies(
   sorted: ScoredCandidate[];
   tieBreakInfo: TieBreakInfo;
 } {
-  const tiedIdsSet = new Set<string>();
-  let tieRuleUsed: string | null = null;
   const epsilon = policy.epsilon;
 
-  const sorted = [...candidates].sort((a, b) => {
-    const diff = b.score - a.score;
-    if (Math.abs(diff) >= epsilon) {
-      return diff;
-    }
+  // 1. Primary sort by score descending
+  const primarySorted = [...candidates].sort((a, b) => b.score - a.score);
 
-    // Scores are tied within epsilon
-    tiedIdsSet.add(a.request.requestId);
-    tiedIdsSet.add(b.request.requestId);
+  // 2. Identify contiguous groups of equal scores (within epsilon)
+  const groups: ScoredCandidate[][] = [];
+  let currentGroup: ScoredCandidate[] = [];
 
-    for (const rule of policy.tieBreakOrder) {
-      if (rule === "fewestSessionsThisMonth") {
-        const delta = a.request.sessionsThisMonth - b.request.sessionsThisMonth;
-        if (delta !== 0) {
-          if (!tieRuleUsed) tieRuleUsed = rule;
-          return delta;
-        }
-      } else if (rule === "earliestRequest") {
-        const timeA = new Date(a.request.requestedAt).getTime();
-        const timeB = new Date(b.request.requestedAt).getTime();
-        if (timeA !== timeB) {
-          if (!tieRuleUsed) tieRuleUsed = rule;
-          return timeA - timeB;
-        }
-      } else if (rule === "seededLottery") {
-        const lotA = getLotteryValue(seed, a.request.requestId);
-        const lotB = getLotteryValue(seed, b.request.requestId);
-        if (lotA !== lotB) {
-          if (!tieRuleUsed) tieRuleUsed = rule;
-          return lotA - lotB; // smaller float ranks higher
-        }
+  for (const cand of primarySorted) {
+    if (currentGroup.length === 0) {
+      currentGroup.push(cand);
+    } else {
+      const baseScore = currentGroup[0].score;
+      if (Math.abs(baseScore - cand.score) < epsilon) {
+        currentGroup.push(cand);
+      } else {
+        groups.push(currentGroup);
+        currentGroup = [cand];
       }
     }
+  }
+  if (currentGroup.length > 0) {
+    groups.push(currentGroup);
+  }
 
-    return a.request.requestId.localeCompare(b.request.requestId);
-  });
+  const tiedIdsSet = new Set<string>();
+  let tieRuleUsed: string | null = null;
 
+  // 3. For each contiguous group with > 1 item, apply tieBreakOrder
+  for (const group of groups) {
+    if (group.length > 1) {
+      for (const item of group) {
+        tiedIdsSet.add(item.request.requestId);
+      }
+
+      group.sort((a, b) => {
+        for (const rule of policy.tieBreakOrder) {
+          if (rule === "fewestSessionsThisMonth") {
+            const delta = a.request.sessionsThisMonth - b.request.sessionsThisMonth;
+            if (delta !== 0) {
+              if (!tieRuleUsed) tieRuleUsed = rule;
+              return delta;
+            }
+          } else if (rule === "earliestRequest") {
+            const timeA = new Date(a.request.requestedAt).getTime();
+            const timeB = new Date(b.request.requestedAt).getTime();
+            if (timeA !== timeB) {
+              if (!tieRuleUsed) tieRuleUsed = rule;
+              return timeA - timeB;
+            }
+          } else if (rule === "seededLottery") {
+            const lotA = getLotteryValue(seed, a.request.requestId);
+            const lotB = getLotteryValue(seed, b.request.requestId);
+            if (lotA !== lotB) {
+              if (!tieRuleUsed) tieRuleUsed = rule;
+              return lotA - lotB; // smaller float ranks higher
+            }
+          }
+        }
+        return a.request.requestId.localeCompare(b.request.requestId);
+      });
+    }
+  }
+
+  const sorted = groups.flat();
   const tiedRequestIds = Array.from(tiedIdsSet);
   const used = tiedRequestIds.length > 0;
 
