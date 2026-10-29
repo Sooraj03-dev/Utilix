@@ -284,3 +284,4 @@ export async function loadAdminKpis(windowDays: number = 30): Promise<AdminKpiRe
     underusedResources: underused,
   };
 }
+

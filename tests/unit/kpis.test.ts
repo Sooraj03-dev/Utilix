@@ -211,7 +211,7 @@ describe("KPI Telemetry against Utilix Seed Dataset", () => {
     }
 
     const completedBookings = dataset.bookings.filter(
-      (b) => b.status === "approved" || b.status === "confirmed"
+      (b) => b.status === "approved"
     );
 
     for (const b of completedBookings) {
@@ -235,3 +235,4 @@ describe("KPI Telemetry against Utilix Seed Dataset", () => {
     expect(fairness.score).toBeLessThanOrEqual(100.0);
   });
 });
+
