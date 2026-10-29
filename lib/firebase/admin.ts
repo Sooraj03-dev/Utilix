@@ -63,3 +63,8 @@ export function getFirebaseAdminAuth(): AdminAuth | null {
 export function getFirebaseAdminDb(): AdminFirestore | null {
   return adminDbSingleton ?? adminDb;
 }
+
+// Accessors for seed compatibility
+export const getAdminApp = getFirebaseAdminApp;
+export const getAdminAuth = getFirebaseAdminAuth;
+export const getAdminDb = getFirebaseAdminDb;

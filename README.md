@@ -78,3 +78,17 @@ Demo accounts:
 - `POST /api/auth/session` (set Firebase ID-token cookie)
 - `GET /api/auth/session` (get current user)
 - `POST /api/auth/logout` (clear session)
+
+## Seeding
+
+The seed module provides three targets through `scripts/seed.ts`:
+
+- `SEED_TARGET=mock`: writes deterministic JSON fixtures to `scripts/generated/mock-seed-data.json`.
+- `SEED_TARGET=emulator`: upserts deterministic records into Firebase emulator.
+- `SEED_TARGET=demo`: upserts deterministic records into an allowlisted development Firebase project.
+
+Safety controls:
+
+- `ALLOW_SEED=false` by default.
+- Demo writes require `FIREBASE_PROJECT_ID` to be listed in `SEED_DEV_PROJECT_ALLOWLIST`.
+- No destructive deletes are used.

@@ -101,6 +101,9 @@ export type {
 // Auth types from fs-a/auth-roles
 export * from "./auth";
 
+// Seed types from fs-a/seed
+export * from "./seed";
+
 // ─── Firestore collection names (single source of truth) ───
 export const COLLECTIONS = {
   users: "users",
