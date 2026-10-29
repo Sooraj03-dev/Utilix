@@ -31,7 +31,7 @@ class Policy(BaseModel):
 class RequestItem(BaseModel):
     id: str
     userId: str
-    userName: str
+    userName: str = "Anonymous"
     department: str
     requestedSlotId: str
     sessionsThisMonth: int = 0
@@ -39,6 +39,9 @@ class RequestItem(BaseModel):
     projectNeedScore: float = 5.0
     isPriorityGroup: bool = False
     trainingVerified: bool = True
+    withinBookingLimit: bool = True
+    noOverlap: bool = True
+    resourceAvailable: bool = True
     currentCreditBalance: int = 10
     freeSessionsLeft: int = 3
     submittedAt: str
@@ -60,6 +63,7 @@ class RankingItem(BaseModel):
     coordinatorSummary: str
     decidedBy: Optional[str] = None
     tiedWith: List[str] = Field(default_factory=list)
+    explanationSource: Optional[str] = "fallback"
 
 class ExcludedItem(BaseModel):
     requestId: str
@@ -71,6 +75,7 @@ class TieBreakInfo(BaseModel):
     tiedGroupsCount: int = 0
     totalTiedRequests: int = 0
     tiesDecided: List[Dict[str, Any]] = Field(default_factory=list)
+    seedUsed: Optional[str] = None
 
 class AuditInfo(BaseModel):
     totalRequests: int

@@ -1,9 +1,15 @@
-"""POST /allocate - Deterministic Fair Allocation Engine."""
+"""POST /allocate - Deterministic Fair Allocation Engine.
+
+Promotion Mode:
+When mode == 'promotion' (e.g. following a cancellation), the engine executes
+the exact same deterministic ranking and scoring logic on the remaining candidates
+to promote the highest-priority waitlisted request without unfair bias.
+"""
 import time
 from typing import Dict, List, Tuple
 from fastapi import APIRouter
 from app.config import settings
-from app.explain import generate_fallback_explanation
+from app.explain import generate_explanation
 from app.schemas import (
     AllocateRequest,
     AllocateResponse,
@@ -32,9 +38,20 @@ async def allocate(payload: AllocateRequest) -> AllocateResponse:
     waitlist: List[RankingItem] = []
     excluded: List[ExcludedItem] = []
 
-    # 1. Hard constraint validation
+    # 1. Hard constraint validation in strict deterministic order
     eligible_requests: List[RequestItem] = []
     for req in requests:
+        if not req.resourceAvailable:
+            excluded.append(
+                ExcludedItem(
+                    requestId=req.id,
+                    userId=req.userId,
+                    reason="The requested resource is currently unavailable or undergoing maintenance.",
+                    code="RESOURCE_UNAVAILABLE",
+                )
+            )
+            continue
+
         if not req.trainingVerified:
             excluded.append(
                 ExcludedItem(
@@ -42,6 +59,28 @@ async def allocate(payload: AllocateRequest) -> AllocateResponse:
                     userId=req.userId,
                     reason="Mandatory safety & equipment training is not verified for this resource.",
                     code="TRAINING_MISSING",
+                )
+            )
+            continue
+
+        if not req.withinBookingLimit:
+            excluded.append(
+                ExcludedItem(
+                    requestId=req.id,
+                    userId=req.userId,
+                    reason="Active booking limit reached for this resource category.",
+                    code="LIMIT_REACHED",
+                )
+            )
+            continue
+
+        if not req.noOverlap:
+            excluded.append(
+                ExcludedItem(
+                    requestId=req.id,
+                    userId=req.userId,
+                    reason="Request conflicts with an existing confirmed booking in your schedule.",
+                    code="OVERLAP",
                 )
             )
             continue
@@ -129,7 +168,7 @@ async def allocate(payload: AllocateRequest) -> AllocateResponse:
         decided_by = decided_by_map.get(req.id)
         tied_with = tied_with_map.get(req.id, [])
 
-        student_reason, coord_summary = generate_fallback_explanation(
+        student_reason, coord_summary, expl_source = await generate_explanation(
             req=req,
             rank=rank,
             total_score=score,
@@ -148,6 +187,7 @@ async def allocate(payload: AllocateRequest) -> AllocateResponse:
             coordinatorSummary=coord_summary,
             decidedBy=decided_by,
             tiedWith=tied_with,
+            explanationSource=expl_source,
         )
 
         if is_alloc:
@@ -167,6 +207,7 @@ async def allocate(payload: AllocateRequest) -> AllocateResponse:
             tiedGroupsCount=tie_groups_count,
             totalTiedRequests=total_tied_requests,
             tiesDecided=ties_decided_records,
+            seedUsed=seed if tie_groups_count > 0 else None,
         ),
         executionTimeMs=execution_time_ms,
     )
