@@ -142,26 +142,86 @@ export function UtilixMonogram({
 /**
  * Custom SVG Wordmark for "Utilix":
  * - Rendered in bold, rounded, heavy geometric sans style matching reference
- * - Cream face (#FFF9E6)
- * - Solid black border (#000000)
- * - Deep black 3D extrusion/drop shadow (#000000)
+ * - Light theme: Cream face (#FFF9E6) with solid black border & 3D extrusion
+ * - Dark theme: Crisp pure white (#FFFFFF) with subtle depth & signature yellow dot
  */
 export function UtilixWordmark({
   height = 36,
+  theme = "light",
   hasShadow = true,
   className,
 }: {
   height?: number | string;
+  theme?: "light" | "dark";
   hasShadow?: boolean;
   className?: string;
 }) {
+  const numericHeight = typeof height === "number" ? height : parseInt(String(height), 10) || 36;
+  const width = Math.round(numericHeight * (320 / 72));
+
+  if (theme === "dark") {
+    return (
+      <svg
+        width={width}
+        height={numericHeight}
+        viewBox="0 0 320 72"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        className={cn("select-none shrink-0 overflow-visible", className)}
+        style={{ aspectRatio: "320 / 72" }}
+        aria-label="Utilix Wordmark"
+      >
+        {/* Subtle Depth Shadow */}
+        {hasShadow && (
+          <text
+            x="4"
+            y="56"
+            fontFamily="var(--font-sans), 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif"
+            fontSize="58"
+            fontWeight="900"
+            letterSpacing="-1.5px"
+            fill="rgba(0, 0, 0, 0.45)"
+          >
+            Utilix
+          </text>
+        )}
+
+        {/* Crisp White Lettering */}
+        <text
+          x="4"
+          y="54"
+          fontFamily="var(--font-sans), 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif"
+          fontSize="58"
+          fontWeight="900"
+          letterSpacing="-1.5px"
+          fill="#FFFFFF"
+        >
+          Utilix
+        </text>
+
+        {/* Playful Brand Yellow Dot on the 'i' */}
+        <circle
+          cx="152"
+          cy="19"
+          r="6.5"
+          fill="#FFD60A"
+          stroke="#0F172A"
+          strokeWidth="2"
+          filter="drop-shadow(0 0 4px rgba(255, 214, 10, 0.6))"
+        />
+      </svg>
+    );
+  }
+
   return (
     <svg
-      height={height}
+      width={width}
+      height={numericHeight}
       viewBox="0 0 320 72"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className={cn("select-none", className)}
+      className={cn("select-none shrink-0 overflow-visible", className)}
+      style={{ aspectRatio: "320 / 72" }}
       aria-label="Utilix Wordmark"
     >
       {/* 3D Black Extrusion Shadow Layer */}
@@ -176,7 +236,7 @@ export function UtilixWordmark({
             letterSpacing="-1.5px"
             fill="#000000"
             stroke="#000000"
-            strokeWidth="10"
+            strokeWidth="8"
             strokeLinejoin="round"
             strokeLinecap="round"
           >
@@ -195,7 +255,7 @@ export function UtilixWordmark({
         letterSpacing="-1.5px"
         fill="#000000"
         stroke="#000000"
-        strokeWidth="9"
+        strokeWidth="6"
         strokeLinejoin="round"
         strokeLinecap="round"
       >
@@ -228,6 +288,7 @@ export function UtilixWordmark({
 export function UtilixLogo({
   variant = "horizontal",
   size = "md",
+  theme = "light",
   showTagline = false,
   isBlinking = false,
   isRapidBlinking = false,
@@ -235,6 +296,7 @@ export function UtilixLogo({
 }: {
   variant?: "horizontal" | "vertical" | "icon-only" | "wordmark-only";
   size?: "sm" | "md" | "lg" | "xl";
+  theme?: "light" | "dark";
   showTagline?: boolean;
   isBlinking?: boolean;
   isRapidBlinking?: boolean;
@@ -267,7 +329,7 @@ export function UtilixLogo({
   }
 
   if (variant === "wordmark-only") {
-    return <UtilixWordmark height={wordmarkHeights} className={className} />;
+    return <UtilixWordmark height={wordmarkHeights} theme={theme} className={className} />;
   }
 
   if (variant === "vertical") {
@@ -279,9 +341,12 @@ export function UtilixLogo({
           isBlinking={isBlinking}
           isRapidBlinking={isRapidBlinking}
         />
-        <UtilixWordmark height={wordmarkHeights} />
+        <UtilixWordmark height={wordmarkHeights} theme={theme} />
         {showTagline && (
-          <span className="text-xs sm:text-sm font-black tracking-widest uppercase bg-[#FFD60A] text-[#000000] px-2.5 py-0.5 rounded-full border-[2px] border-black shadow-[2px_2px_0px_#000] mt-1">
+          <span className={cn(
+            "text-xs sm:text-sm font-black tracking-widest uppercase px-2.5 py-0.5 rounded-full border-[2px] mt-1 shadow-[2px_2px_0px_#000]",
+            theme === "dark" ? "bg-[#FFD60A] text-[#000000] border-black" : "bg-[#FFD60A] text-[#000000] border-black"
+          )}>
             Share. Use. Build.
           </span>
         )}
@@ -301,13 +366,16 @@ export function UtilixLogo({
         />
       </div>
       <div className="flex flex-col justify-center">
-        <UtilixWordmark height={wordmarkHeights} />
+        <UtilixWordmark height={wordmarkHeights} theme={theme} />
         {showTagline && (
-          <span className="text-[10px] sm:text-[11px] font-black tracking-wider uppercase text-[#111111] flex items-center gap-1.5 -mt-1 pl-1">
+          <span className={cn(
+            "text-[10px] sm:text-[11px] font-black tracking-wider uppercase flex items-center gap-1.5 -mt-1 pl-1",
+            theme === "dark" ? "text-slate-300" : "text-[#111111]"
+          )}>
             <span>Share</span>
-            <span className="w-1 h-1 rounded-full bg-black inline-block" />
+            <span className={cn("w-1 h-1 rounded-full inline-block", theme === "dark" ? "bg-[#FFD60A]" : "bg-black")} />
             <span>Use</span>
-            <span className="w-1 h-1 rounded-full bg-black inline-block" />
+            <span className={cn("w-1 h-1 rounded-full inline-block", theme === "dark" ? "bg-[#FFD60A]" : "bg-black")} />
             <span>Build</span>
           </span>
         )}

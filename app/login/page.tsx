@@ -24,7 +24,7 @@ import {
   Button,
   Input,
   Avatar,
-  UtilixAppIcon,
+  UtilixMonogram,
   UtilixWordmark,
 } from "@/components";
 import { useRole, DEMO_USERS } from "@/components/RoleContext";
@@ -204,67 +204,71 @@ function LoginContent() {
       <div className="w-full max-w-5xl rounded-3xl border-[3.5px] border-[#111111] shadow-[8px_8px_0px_0px_#111111] overflow-hidden grid grid-cols-1 lg:grid-cols-12 bg-white">
         
         {/* ─── LEFT PANEL: Brand & Product Identity ─────────────────────── */}
-        <div className="lg:col-span-5 bg-[#0F172A] text-white p-8 sm:p-10 flex flex-col justify-between relative overflow-hidden">
-          {/* Subtle background glow */}
-          <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-teal-500/10 blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-24 -right-24 w-72 h-72 rounded-full bg-amber-400/10 blur-3xl pointer-events-none" />
+        <div className="lg:col-span-5 bg-[#0B132B] text-white p-8 sm:p-10 flex flex-col justify-between relative overflow-hidden">
+          {/* Subtle ambient lighting */}
+          <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full bg-[#38BDF8]/10 blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-24 -right-24 w-80 h-80 rounded-full bg-[#FFD60A]/10 blur-3xl pointer-events-none" />
 
           {/* Top Brand Header */}
           <div className="relative z-10 space-y-6">
-            <Link href="/" className="inline-flex items-center gap-3 group" aria-label="Utilix Home">
-              <div className="w-12 h-12 rounded-2xl bg-[#FFD60A] border-[2.5px] border-black flex items-center justify-center shadow-[2px_2px_0px_#FFF] group-hover:scale-105 transition-transform">
-                <UtilixAppIcon size={34} />
+            <Link
+              href="/"
+              className="inline-flex items-center gap-3 group focus:outline-none focus:ring-2 focus:ring-[#FFD60A] rounded-2xl p-1 -ml-1 transition-all"
+              aria-label="Utilix Home"
+            >
+              <div className="w-11 h-11 rounded-2xl bg-[#FFD60A] border-[2.5px] border-black flex items-center justify-center shadow-[3px_3px_0px_0px_rgba(0,0,0,0.5)] group-hover:scale-105 group-hover:rotate-[-2deg] transition-all shrink-0">
+                <UtilixMonogram size={30} hasSparkle={true} hasShadow={false} />
               </div>
-              <UtilixWordmark height={32} className="brightness-0 invert" />
+              <UtilixWordmark height={32} theme="dark" />
             </Link>
 
-            <div className="space-y-3 pt-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-amber-400/20 text-[#FFD60A] border border-amber-400/30">
+            <div className="space-y-3 pt-1">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-[#FFD60A]/15 text-[#FFD60A] border border-[#FFD60A]/35">
                 <Sparkles className="w-3.5 h-3.5 stroke-[2.5]" />
-                Institutional Resource Sharing
-              </span>
-              <h1 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight text-white">
+                <span>Institutional Resource Sharing</span>
+              </div>
+              <h1 className="text-3xl sm:text-4xl lg:text-4xl font-black tracking-tight leading-[1.15] text-white">
                 Your Campus.<br />Shared Smarter.
               </h1>
-              <p className="text-sm font-medium text-slate-300 leading-relaxed">
+              <p className="text-sm font-medium text-slate-300 leading-relaxed max-w-md">
                 Discover resources, book equipment, and make the most of your campus with fair algorithmic allocation.
               </p>
             </div>
 
             {/* 3 Concise Benefit Points */}
-            <div className="space-y-4 pt-2">
+            <div className="space-y-4 pt-1">
               <div className="flex items-start gap-3.5">
-                <div className="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 mt-0.5 text-teal-400">
-                  <Boxes className="w-4 h-4" />
+                <div className="w-9 h-9 rounded-xl bg-slate-800/90 border border-slate-700/80 flex items-center justify-center shrink-0 mt-0.5 text-[#38BDF8] shadow-sm">
+                  <Boxes className="w-4 h-4 stroke-[2.5]" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold text-white">Discover Available Resources</h2>
-                  <p className="text-xs text-slate-400 leading-relaxed">
+                  <h2 className="text-sm font-bold text-white tracking-tight">Discover Available Resources</h2>
+                  <p className="text-xs text-slate-300 leading-relaxed mt-0.5">
                     Access 3D printers, media equipment, hardware labs, and studios with real-time schedule visibility.
                   </p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3.5">
-                <div className="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 mt-0.5 text-amber-400">
-                  <ShieldCheck className="w-4 h-4" />
+                <div className="w-9 h-9 rounded-xl bg-slate-800/90 border border-slate-700/80 flex items-center justify-center shrink-0 mt-0.5 text-[#FFD60A] shadow-sm">
+                  <ShieldCheck className="w-4 h-4 stroke-[2.5]" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold text-white">Book Equipment &amp; Spaces</h2>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    Transparent reservation queues backed by policy fairness algorithms with zero pay-to-play favoritism.
+                  <h2 className="text-sm font-bold text-white tracking-tight">Book Equipment &amp; Spaces</h2>
+                  <p className="text-xs text-slate-300 leading-relaxed mt-0.5">
+                    Transparent reservation queues backed by policy fairness algorithms.
                   </p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3.5">
-                <div className="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 mt-0.5 text-sky-400">
-                  <Layers className="w-4 h-4" />
+                <div className="w-9 h-9 rounded-xl bg-slate-800/90 border border-slate-700/80 flex items-center justify-center shrink-0 mt-0.5 text-[#4ADE80] shadow-sm">
+                  <Layers className="w-4 h-4 stroke-[2.5]" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold text-white">Manage Everything in One Place</h2>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    Track requests, physical check-ins, return condition inspections, and credit ledger in your dashboard.
+                  <h2 className="text-sm font-bold text-white tracking-tight">Manage Everything in One Place</h2>
+                  <p className="text-xs text-slate-300 leading-relaxed mt-0.5">
+                    Track requests, physical check-ins, return inspections, and credit history.
                   </p>
                 </div>
               </div>
@@ -391,11 +395,11 @@ function LoginContent() {
             )}
 
             {/* Navigation Tabs between Google, Campus Email, and Demo */}
-            <div className="flex rounded-xl bg-[#FFF9E6] border-[2px] border-[#111111] p-1 gap-1 text-xs font-black">
+            <div className="flex rounded-2xl bg-[#FFF9E6] border-[2px] border-[#111111] p-1.5 gap-1.5 text-xs font-black shadow-[2px_2px_0px_#111]">
               <button
                 type="button"
                 onClick={() => { setActiveTab("google"); setErrorMessage(null); }}
-                className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                className={`flex-1 py-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-black ${
                   activeTab === "google"
                     ? "bg-[#FFD60A] text-[#111111] shadow-[2px_2px_0px_#111]"
                     : "text-[#111111]/70 hover:text-[#111111]"
@@ -407,7 +411,7 @@ function LoginContent() {
               <button
                 type="button"
                 onClick={() => { setActiveTab("email"); setErrorMessage(null); }}
-                className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                className={`flex-1 py-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-black ${
                   activeTab === "email"
                     ? "bg-[#FFD60A] text-[#111111] shadow-[2px_2px_0px_#111]"
                     : "text-[#111111]/70 hover:text-[#111111]"
@@ -419,7 +423,7 @@ function LoginContent() {
               <button
                 type="button"
                 onClick={() => { setActiveTab("demo"); setErrorMessage(null); }}
-                className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                className={`flex-1 py-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-black ${
                   activeTab === "demo"
                     ? "bg-[#FFD60A] text-[#111111] shadow-[2px_2px_0px_#111]"
                     : "text-[#111111]/70 hover:text-[#111111]"
