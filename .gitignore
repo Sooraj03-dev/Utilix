@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+
+# env files
+.env*
+!.env.example
+
+# python
+.venv/
+__pycache__/
+*.pyc
+
+# firebase
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+firebase-export*/
+
+# service account keys
+*-service-account*.json
+service-account*.json
+
+# misc
+.DS_Store
+*.log
