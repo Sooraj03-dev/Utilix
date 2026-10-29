@@ -85,6 +85,46 @@ export const AUDIT_ACTION_MAP: Record<AuditAction, ActionDisplayMeta> = {
     category: "operations",
     description: "Damaged equipment or lab incident logged",
   },
+  training_requested: {
+    label: "Training Requested",
+    category: "operations",
+    description: "Student submitted training qualification request",
+  },
+  training_request_status_changed: {
+    label: "Training Request Updated",
+    category: "operations",
+    description: "Training request status transitioned",
+  },
+  training_certified: {
+    label: "Training Certified",
+    category: "operations",
+    description: "Coordinator certified user training qualification",
+  },
+  training_revoked: {
+    label: "Training Revoked",
+    category: "operations",
+    description: "User training qualification revoked",
+  },
+  availability_window_created: {
+    label: "Availability Window Created",
+    category: "resource",
+    description: "New recurring availability schedule window created",
+  },
+  availability_window_updated: {
+    label: "Availability Window Updated",
+    category: "resource",
+    description: "Recurring availability schedule window modified",
+  },
+  availability_window_deleted: {
+    label: "Availability Window Deleted",
+    category: "resource",
+    description: "Recurring availability schedule window deleted",
+  },
+  maintenance_block_created: {
+    label: "Maintenance Block Created",
+    category: "resource",
+    description: "Maintenance window scheduled for resource",
+  },
   slot_locked: {
     label: "Slot Reserved",
     category: "booking",
@@ -107,6 +147,10 @@ export const ENTITY_TYPE_LABELS: Record<string, string> = {
   checkout: "Equipment Checkout",
   issue: "Issue Report",
   credit: "Credit Transaction",
+  training_request: "Training Request",
+  training_certification: "Training Certification",
+  availability_window: "Availability Window",
+  maintenance: "Maintenance Block",
 };
 
 /**

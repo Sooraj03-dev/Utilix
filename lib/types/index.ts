@@ -20,7 +20,6 @@ export type {
   TiebreakMethod,
   AuditAction,
   Weekday,
-  TrainingRequestStatus,
 } from "./enums";
 
 // Entity interfaces
@@ -38,7 +37,6 @@ export type {
   Approval,
   Checkout,
   IssueReport,
-  TrainingRequest,
   CreditLedgerEntry,
   Notification,
   PolicyWeights,
@@ -122,7 +120,6 @@ export const COLLECTIONS = {
   approvals: "approvals",
   checkouts: "checkouts",
   issue_reports: "issue_reports",
-  training_requests: "training_requests",
   credit_ledger: "credit_ledger",
   notifications: "notifications",
   policies: "policies",

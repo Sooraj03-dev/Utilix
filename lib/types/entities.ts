@@ -20,7 +20,6 @@ import type {
   TiebreakMethod,
   AuditAction,
   Weekday,
-  TrainingRequestStatus,
 } from "./enums";
 
 // ─── users ───

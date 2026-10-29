@@ -26,7 +26,6 @@ export const waitlistCol = () => col(COLLECTIONS.waitlist);
 export const approvalsCol = () => col(COLLECTIONS.approvals);
 export const checkoutsCol = () => col(COLLECTIONS.checkouts);
 export const issueReportsCol = () => col(COLLECTIONS.issue_reports);
-export const trainingRequestsCol = () => col(COLLECTIONS.training_requests);
 export const creditLedgerCol = () => col(COLLECTIONS.credit_ledger);
 export const notificationsCol = () => col(COLLECTIONS.notifications);
 export const policiesCol = () => col(COLLECTIONS.policies);
