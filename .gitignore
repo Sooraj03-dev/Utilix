@@ -1,0 +1,73 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+.yarn/
+.venv/
+venv/
+env/
+
+# next.js
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# build output and caches
+build/
+dist/
+coverage/
+.turbo/
+.vercel
+.eslintcache
+.cache/
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# environment and secrets (templates are committed, real values never)
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+serviceAccount*.json
+*-firebase-adminsdk-*.json
+firebase-adminsdk*.json
+service-account*.json
+
+# firebase
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+pubsub-debug.log
+emulator-data/
+.runtimeconfig.json
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# editors and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+*.swp
+
+# misc
+*.local
+*.bak
+tmp/
