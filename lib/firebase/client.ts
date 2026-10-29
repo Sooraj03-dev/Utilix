@@ -22,6 +22,7 @@ type FirebaseClientConfig = {
   storageBucket: string;
   messagingSenderId: string;
   appId: string;
+  measurementId?: string;
 };
 
 function getFirebaseClientConfig(): FirebaseClientConfig | null {
@@ -32,9 +33,18 @@ function getFirebaseClientConfig(): FirebaseClientConfig | null {
     storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?? "",
     messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? "",
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? "",
+    measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID ?? undefined,
   };
 
-  const hasMissingValue = Object.values(config).some((value) => value.trim() === "");
+  const requiredKeys: (keyof Omit<FirebaseClientConfig, "measurementId">)[] = [
+    "apiKey",
+    "authDomain",
+    "projectId",
+    "storageBucket",
+    "messagingSenderId",
+    "appId",
+  ];
+  const hasMissingValue = requiredKeys.some((k) => !config[k] || config[k].trim() === "");
   return hasMissingValue ? null : config;
 }
 

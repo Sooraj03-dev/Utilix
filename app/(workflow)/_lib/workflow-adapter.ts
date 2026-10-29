@@ -585,3 +585,7 @@ class DynamicWorkflowAdapter implements WorkflowDataAdapter {
 }
 
 export const workflowAdapter: WorkflowDataAdapter = new DynamicWorkflowAdapter();
+
+export function getWorkflowAdapter(): WorkflowDataAdapter {
+  return workflowAdapter;
+}

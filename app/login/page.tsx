@@ -43,25 +43,31 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleDemoLogin = async (targetRole: Role) => {
-    setRole(targetRole);
+    setIsLoading(true);
+    setErrors({});
     const persona = DEMO_USERS[targetRole];
     const creds = DEMO_CREDENTIALS[targetRole];
 
     try {
       if (login) {
-        await login(creds.email, creds.pass).catch(() => {
-          // In mock/offline mode, continuing with role state is safe
-        });
+        await login(creds.email, creds.pass);
       }
-    } catch {
-      // Continue with demo role state
+      setRole(targetRole);
+      success(
+        `Session active: ${persona.name} (${targetRole.toUpperCase()}). Loaded with permissions.`,
+        "Persona Activated",
+      );
+      router.push("/");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Authentication failed.";
+      setErrors((prev) => ({
+        ...prev,
+        general: `Demo login failed: ${msg}. In production mode, accounts must exist in Firebase Authentication.`,
+      }));
+      toastError(msg, "Login Failed");
+    } finally {
+      setIsLoading(false);
     }
-
-    success(
-      `Demo session active: ${persona.name} (${targetRole.toUpperCase()}). Loaded with demo quota and permissions.`,
-      "Demo Persona Activated"
-    );
-    router.push("/");
   };
 
   const handleStandardLogin = async (e: React.FormEvent) => {
@@ -96,18 +102,9 @@ export default function LoginPage() {
       router.push("/");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Authentication failed.";
-      // Fallback for demo experience if Firebase is not reachable
-      if (msg.includes("configuration") || msg.includes("network") || msg.includes("auth")) {
-        setRole("student");
-        info(
-          "Demo session initialized. (Backend credentials or emulator can be connected via .env.local).",
-          "Session Active"
-        );
-        router.push("/");
-      } else {
-        setErrors((prev) => ({ ...prev, general: msg }));
-        toastError(msg, "Sign-In Error");
-      }
+      // Strict: never simulate success on failed credentials or connection errors
+      setErrors((prev) => ({ ...prev, general: msg }));
+      toastError(msg, "Sign-In Failed");
     } finally {
       setIsLoading(false);
     }

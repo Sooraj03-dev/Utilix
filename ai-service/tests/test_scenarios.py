@@ -3,6 +3,8 @@ from app.config import settings
 from app.main import app
 
 client = TestClient(app)
+if settings.AI_SERVICE_SECRET:
+    client.headers["X-AI-Secret"] = settings.AI_SERVICE_SECRET
 
 def test_health_endpoint():
     response = client.get("/health")

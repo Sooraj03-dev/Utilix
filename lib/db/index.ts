@@ -19,3 +19,6 @@ export * from "./training";
 export * from "./audit";
 export * from "./ledger";
 export * from "./errors";
+export * from "./approvals";
+export * from "./checkouts";
+export * from "./issues";
