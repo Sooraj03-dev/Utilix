@@ -66,6 +66,9 @@ export type NotificationType =
   | "credit_granted"
   | "general";
 
+/** Training request lifecycle status */
+export type TrainingRequestStatus = "pending" | "scheduled" | "completed" | "declined";
+
 /** AI decision source */
 export type DecisionSource = "ai" | "fallback" | null;
 
@@ -90,9 +93,16 @@ export type AuditAction =
   | "checkout"
   | "return"
   | "issue_reported"
+  | "training_requested"
+  | "training_request_status_changed"
+  | "training_certified"
+  | "training_revoked"
+  | "availability_window_created"
+  | "availability_window_updated"
+  | "availability_window_deleted"
+  | "maintenance_block_created"
   | "slot_locked"
   | "slot_released";
 
 /** Weekday 0 (Sunday) – 6 (Saturday) */
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
-

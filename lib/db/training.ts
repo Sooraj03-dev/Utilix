@@ -31,7 +31,9 @@ export async function hasTraining(
   trainingType: string
 ): Promise<boolean> {
   const cert = await getTrainingCertification(userId, trainingType);
-  return cert !== null;
+  if (!cert) return false;
+  if (cert.revoked_at) return false;
+  return true;
 }
 
 /** List all certifications held by a user. */
@@ -42,6 +44,14 @@ export async function listTrainingCertificationsByUser(
     .where("user_id", "==", userId)
     .get();
 
+  return snap.docs
+    .map((d) => docToEntity<TrainingCertification>(d.id, d.data()))
+    .filter((c): c is TrainingCertification => c !== null);
+}
+
+/** List all certifications across the platform (for admin/coordinators). */
+export async function listAllTrainingCertifications(): Promise<TrainingCertification[]> {
+  const snap = await trainingCertsCol().get();
   return snap.docs
     .map((d) => docToEntity<TrainingCertification>(d.id, d.data()))
     .filter((c): c is TrainingCertification => c !== null);
@@ -68,6 +78,7 @@ export async function createTrainingCertification(
     training_type: data.training_type,
     certified_by: data.certified_by,
     certified_at: nowTs,
+    revoked_at: null,
   };
 
   await ref.set(firestoreData);
@@ -78,5 +89,19 @@ export async function createTrainingCertification(
     training_type: data.training_type,
     certified_by: data.certified_by,
     certified_at: certifiedAt,
+    revoked_at: null,
   };
+}
+
+/** Revoke a training certification by stamping revoked_at. */
+export async function revokeTrainingCertification(
+  userId: string,
+  trainingType: string
+): Promise<void> {
+  const docId = toCertificationDocId(userId, trainingType);
+  const ref = trainingCertsCol().doc(docId);
+  const nowTs = nowTimestamp();
+  await ref.update({
+    revoked_at: nowTs,
+  });
 }
