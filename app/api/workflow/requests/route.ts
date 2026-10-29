@@ -16,30 +16,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { workflowAdapter } from "@/app/(workflow)/_lib/workflow-adapter";
 import { validateBookingForm } from "@/app/(workflow)/_lib/validation";
-import type { BookingFormData, AuthUser } from "@/app/(workflow)/_lib/types";
-import { AuthError } from "@/lib/auth/require-user";
-
-async function getCaller(request: NextRequest): Promise<AuthUser> {
-  const useMock =
-    process.env.USE_MOCK_DATA === "true" ||
-    process.env.NEXT_PUBLIC_USE_MOCK_DATA === "true";
-
-  if (useMock) {
-    return {
-      uid: "user_alice",
-      name: "Alice Chen",
-      email: "alice@university.edu",
-      role: "student",
-    };
-  }
-
-  const { requireUser } = await import("@/lib/auth/require-user");
-  return requireUser(request);
-}
+import type { BookingFormData } from "@/app/(workflow)/_lib/types";
+import { getWorkflowCaller, handleWorkflowError, AuthError } from "@/app/(workflow)/_lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getCaller(request);
+    const user = await getWorkflowCaller(request);
     const userId = user.role === "student" ? user.uid : undefined;
     const bookings = await workflowAdapter.listRequests(userId);
 
@@ -50,23 +32,13 @@ export async function GET(request: NextRequest) {
       _mock: workflowAdapter.isMock,
     });
   } catch (error) {
-    if (error instanceof AuthError) {
-      return NextResponse.json(
-        { ok: false, success: false, error: { code: "UNAUTHORIZED", message: error.message } },
-        { status: error.status },
-      );
-    }
-    const errMessage = error instanceof Error ? error.message : "Failed to fetch bookings";
-    return NextResponse.json(
-      { ok: false, success: false, error: { code: "BOOKING_FETCH_FAILED", message: errMessage } },
-      { status: 500 },
-    );
+    return handleWorkflowError(error);
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getCaller(request);
+    const user = await getWorkflowCaller(request);
     const body = (await request.json()) as BookingFormData;
 
     // Validate resource

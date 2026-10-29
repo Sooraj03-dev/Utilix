@@ -2,7 +2,7 @@
  * Workflow Data Adapter — Owner B
  *
  * Implements the separation between:
- * - MockWorkflowAdapter: In-memory store for local UI development & demo
+ * - MockWorkflowAdapter: In-memory store for local UI development, testing & demo
  * - FirebaseWorkflowAdapter: Real Firestore & Transactional database integration
  *
  * Configuration:
@@ -18,13 +18,20 @@ import type {
   AuthUser,
   TimeSlot,
   BookingFormData,
+  EligibilityResult,
+  CheckoutData,
+  CheckinData,
 } from "./types";
+import type { WaitlistEntry } from "@/lib/types";
 
 import {
   MOCK_RESOURCES,
   MOCK_BOOKINGS,
   generateMockSlots,
 } from "./mock-data";
+
+import { aiClient } from "@/lib/ai-client";
+import { assertTransition } from "@/lib/types/status";
 
 // ─── Adapter Interface ───────────────────────────────────────────────────
 
@@ -40,17 +47,81 @@ export interface WorkflowDataAdapter {
   getResource(id: string): Promise<FoundationResource | null>;
   getResourceSlots(id: string, date: string): Promise<TimeSlot[]>;
 
+  // Eligibility
+  checkEligibility(
+    userId: string,
+    resourceId: string,
+    slotStart?: string,
+    slotEnd?: string,
+  ): Promise<EligibilityResult>;
+
   // Bookings / Requests
   listRequests(userId?: string): Promise<Booking[]>;
   getRequest(id: string): Promise<Booking | null>;
   createRequest(data: BookingFormData, user: AuthUser): Promise<{ booking: Booking; waitlisted: boolean }>;
   cancelRequest(id: string, user: AuthUser, reason?: string): Promise<{ booking: Booking; credits_refunded: number }>;
+
+  // Coordinator Actions
+  approveBooking(id: string, actor: AuthUser, note?: string): Promise<{ booking: Booking }>;
+  rejectBooking(id: string, actor: AuthUser, reason?: string): Promise<{ booking: Booking; credits_refunded: number }>;
+  checkoutBooking(id: string, actor: AuthUser, data: CheckoutData): Promise<{ booking: Booking }>;
+  checkinBooking(id: string, actor: AuthUser, data: CheckinData): Promise<{ booking: Booking }>;
+
+  // Waitlist & Issues
+  listWaitlist(resourceId?: string, slotId?: string): Promise<WaitlistEntry[]>;
+  joinWaitlist(resourceId: string, slotId: string, user: AuthUser): Promise<{ waitlistEntry: WaitlistEntry }>;
+  reportIssue(bookingId: string, user: AuthUser, description: string, severity?: string): Promise<Record<string, unknown>>;
+  resolveConflict(conflictId: string, actor: AuthUser, resolution: string, overrideReason: string): Promise<Record<string, unknown>>;
 }
 
-// ─── Mock Adapter Implementation ─────────────────────────────────────────
+// ─── Mock In-Memory State ────────────────────────────────────────────────
+
+interface MockAuditLog {
+  id: string;
+  actor_id: string;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  reason?: string | null;
+  rule_version: string;
+  created_at: string;
+}
+
+interface MockNotification {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  body: string;
+  link?: string;
+  read: boolean;
+  created_at: string;
+}
 
 const sessionBookings: Booking[] = [...MOCK_BOOKINGS];
-let nextBookingId = 100;
+const sessionWaitlist: WaitlistEntry[] = [];
+const sessionAuditLogs: MockAuditLog[] = [];
+const sessionNotifications: MockNotification[] = [];
+const sessionUserCredits: Record<string, number> = {
+  user_alice: 10,
+  user_bob: 10,
+  "student-01": 12,
+  "student-02": 8,
+  "student-03": 15,
+  "student-04": 2, // low credits / failed training in demo
+};
+const sessionUserTraining: Record<string, string[]> = {
+  user_alice: ["3d_printing_basic", "Laser Cutter Level 1", "Prusa 3D Safety"],
+  user_bob: ["3d_printing_basic", "Prusa 3D Safety"],
+  "student-01": ["3d_printing_basic", "3D Printing Safety", "Electronics Lab Safety"],
+  "student-02": ["3d_printing_basic", "3D Printing Safety"],
+  "student-03": ["3d_printing_basic"],
+  "student-04": [], // no training (fails training test)
+};
+let nextBookingId = 200;
+let nextWaitlistId = 50;
+
+// ─── Mock Adapter Implementation ─────────────────────────────────────────
 
 export class MockWorkflowAdapter implements WorkflowDataAdapter {
   readonly isMock = true;
@@ -85,7 +156,112 @@ export class MockWorkflowAdapter implements WorkflowDataAdapter {
   }
 
   async getResourceSlots(id: string, date: string): Promise<TimeSlot[]> {
-    return generateMockSlots(id, date);
+    const slots = generateMockSlots(id, date);
+    // Mark booked if slot has an active booking in session
+    return slots.map((s) => {
+      const isBooked = sessionBookings.some(
+        (b) =>
+          b.resource_id === id &&
+          (b.status === "confirmed" || b.status === "allocated" || b.status === "pending_approval") &&
+          b.slot_start.startsWith(date) &&
+          b.slot_start.includes(s.startTime),
+      );
+      return {
+        ...s,
+        isAvailable: s.isAvailable && !isBooked,
+      };
+    });
+  }
+
+  async checkEligibility(
+    userId: string,
+    resourceId: string,
+    slotStart?: string,
+    slotEnd?: string,
+  ): Promise<EligibilityResult> {
+    const resource = await this.getResource(resourceId);
+    if (!resource) {
+      throw new Error(`Resource "${resourceId}" not found`);
+    }
+
+    const reasons: string[] = [];
+
+    // 1. Account active check
+    const accountActive = true;
+
+    // 2. Training check
+    let trainingVerified = true;
+    if (resource.requires_training) {
+      const userCerts = sessionUserTraining[userId] ?? [];
+      trainingVerified = userCerts.some((c) =>
+        c.toLowerCase().includes(resource.requires_training!.toLowerCase()),
+      );
+      if (!trainingVerified) {
+        reasons.push(
+          `Missing required certification: "${resource.requires_training}". Complete safety quiz before booking.`,
+        );
+      }
+    }
+
+    // 3. Active booking limit check
+    const activeCount = sessionBookings.filter(
+      (b) =>
+        b.user_id === userId &&
+        ["confirmed", "allocated", "pending_approval"].includes(b.status),
+    ).length;
+    const maxActive = 3;
+    const bookingLimitPassed = activeCount < maxActive;
+    if (!bookingLimitPassed) {
+      reasons.push(
+        `Active booking limit reached: Maximum ${maxActive} active bookings allowed per student.`,
+      );
+    }
+
+    // 4. Credit balance check
+    const currentBalance = sessionUserCredits[userId] ?? 10;
+    const hasSufficientCredits = currentBalance >= resource.credit_cost;
+    if (!hasSufficientCredits) {
+      reasons.push(
+        `Insufficient credit balance: Required ${resource.credit_cost} credits, current balance is ${currentBalance}.`,
+      );
+    }
+
+    // 5. Overlapping booking check
+    let noOverlap = true;
+    if (slotStart && slotEnd) {
+      const startMs = new Date(slotStart).getTime();
+      const endMs = new Date(slotEnd).getTime();
+      const overlap = sessionBookings.some((b) => {
+        if (b.user_id !== userId) return false;
+        if (!["confirmed", "allocated", "pending_approval"].includes(b.status)) return false;
+        const bStart = new Date(b.slot_start).getTime();
+        const bEnd = new Date(b.slot_end).getTime();
+        return startMs < bEnd && endMs > bStart;
+      });
+      if (overlap) {
+        noOverlap = false;
+        reasons.push("Overlapping reservation detected: You already hold a booking in this time window.");
+      }
+    }
+
+    const eligible = accountActive && trainingVerified && bookingLimitPassed && hasSufficientCredits && noOverlap;
+
+    return {
+      eligible,
+      reasons,
+      user_id: userId,
+      resource_id: resourceId,
+      checks: {
+        account_active: accountActive,
+        training_verified: trainingVerified,
+        training_required: resource.requires_training,
+        credit_balance: currentBalance,
+        credit_cost: resource.credit_cost,
+        has_sufficient_credits: hasSufficientCredits,
+        booking_limit_passed: bookingLimitPassed,
+        no_overlap: noOverlap,
+      },
+    };
   }
 
   async listRequests(userId?: string): Promise<Booking[]> {
@@ -106,40 +282,170 @@ export class MockWorkflowAdapter implements WorkflowDataAdapter {
     data: BookingFormData,
     user: AuthUser,
   ): Promise<{ booking: Booking; waitlisted: boolean }> {
-    const resource = MOCK_RESOURCES.find((r) => r.id === data.resourceId);
-    const now = new Date().toISOString();
-    const bookingId = `bk_mock_${++nextBookingId}`;
+    const resource = await this.getResource(data.resourceId);
+    if (!resource) {
+      throw new Error(`Resource "${data.resourceId}" not found`);
+    }
 
     const slotStart = `${data.date}T${data.startTime}:00Z`;
     const slotEnd = `${data.date}T${data.endTime}:00Z`;
-    const slotIds = [`${data.resourceId}_${data.date.replace(/-/g, "")}T${data.startTime.replace(":", "")}`];
+    const slotId = `${data.resourceId}_${data.date.replace(/-/g, "")}T${data.startTime.replace(":", "")}`;
+
+    // 1. Eligibility Check
+    const eligibility = await this.checkEligibility(user.uid, data.resourceId, slotStart, slotEnd);
+    if (!eligibility.eligible) {
+      throw new Error(eligibility.reasons.join(" "));
+    }
+
+    const now = new Date().toISOString();
+    const bookingId = `bk_mock_${++nextBookingId}`;
+
+    // 2. Contention Detection: Check if another active booking holds this slot
+    const existingActiveBooking = sessionBookings.find(
+      (b) =>
+        b.resource_id === data.resourceId &&
+        b.slot_ids.includes(slotId) &&
+        ["confirmed", "allocated", "pending_approval"].includes(b.status),
+    );
+
+    let waitlisted = false;
+    let initialStatus: BookingStatus = resource.restricted ? "pending_approval" : "confirmed";
+    let decisionReason = "Booking confirmed via automated slot lock.";
+    let decisionSource: "ai" | "fallback" = "fallback";
+    let totalScore = 0.85;
+
+    if (existingActiveBooking) {
+      // Direct contention between existing holder and new request!
+      const existingReqUser = existingActiveBooking.user_id;
+      const allocationResp = await aiClient.allocate({
+        slot: {
+          id: slotId,
+          resourceId: resource.id,
+          resourceName: resource.name,
+          department: resource.department_id,
+          startTime: slotStart,
+          endTime: slotEnd,
+          capacity: 1,
+          slotType: "credit",
+          creditCost: resource.credit_cost,
+        },
+        requests: [
+          {
+            id: existingActiveBooking.id,
+            userId: existingReqUser,
+            department: resource.department_id,
+            requestedSlotId: slotId,
+            sessionsThisMonth: 3, // existing user has prior sessions
+            waitingHours: 12.0,
+            projectNeedScore: 6.0,
+            submittedAt: existingActiveBooking.created_at,
+          },
+          {
+            id: bookingId,
+            userId: user.uid,
+            department: resource.department_id,
+            requestedSlotId: slotId,
+            sessionsThisMonth: 0, // new student has 0 sessions (higher fairness priority)
+            waitingHours: 24.0,
+            projectNeedScore: 8.0,
+            submittedAt: now,
+          },
+        ],
+      });
+
+      const winner = allocationResp.allocated[0];
+      const newReqRanked = allocationResp.allocated.find((r) => r.requestId === bookingId) ||
+        allocationResp.waitlist.find((r) => r.requestId === bookingId);
+
+      decisionSource = (newReqRanked?.explanationSource === "ai" ? "ai" : "fallback");
+      totalScore = newReqRanked?.totalScore ?? 0.75;
+
+      if (winner && winner.requestId === bookingId) {
+        // New requester won the contested slot!
+        waitlisted = false;
+        decisionReason = winner.studentReason || "Awarded slot through fairness allocation ranking.";
+        // Previous holder moves to waitlist
+        existingActiveBooking.status = "waitlisted";
+        existingActiveBooking.decision_reason = "Bumped to waitlist due to higher priority allocation request.";
+        // Refund previous holder credits
+        if (existingActiveBooking.cost_credits > 0) {
+          sessionUserCredits[existingReqUser] = (sessionUserCredits[existingReqUser] ?? 10) + existingActiveBooking.cost_credits;
+          existingActiveBooking.cost_credits = 0;
+        }
+        sessionWaitlist.push({
+          id: `wl_${++nextWaitlistId}`,
+          resource_id: resource.id,
+          slot_id: slotId,
+          booking_id: existingActiveBooking.id,
+          user_id: existingReqUser,
+          position: 1,
+          score: 0.5,
+          created_at: now,
+        });
+      } else {
+        // Existing holder won; new requester placed on waitlist
+        waitlisted = true;
+        initialStatus = "waitlisted";
+        decisionReason = newReqRanked?.studentReason || "Slot contested: joined waitlist behind current booking.";
+        sessionWaitlist.push({
+          id: `wl_${++nextWaitlistId}`,
+          resource_id: resource.id,
+          slot_id: slotId,
+          booking_id: bookingId,
+          user_id: user.uid,
+          position: sessionWaitlist.filter((w) => w.slot_id === slotId).length + 1,
+          score: totalScore,
+          created_at: now,
+        });
+      }
+    }
+
+    // 3. Deduct credits if confirmed and cost > 0
+    const costCredits = waitlisted ? 0 : resource.credit_cost;
+    if (!waitlisted && costCredits > 0) {
+      const current = sessionUserCredits[user.uid] ?? 10;
+      sessionUserCredits[user.uid] = current - costCredits;
+    }
 
     const booking: Booking = {
       id: bookingId,
       resource_id: data.resourceId,
       user_id: user.uid,
       member_ids: [user.uid],
-      team_department_ids: ["dept_eng"],
+      team_department_ids: [resource.department_id],
       bundle_id: null,
       slot_start: slotStart,
       slot_end: slotEnd,
-      slot_ids: slotIds,
+      slot_ids: [slotId],
       purpose: data.purpose,
       declared_deadline: null,
-      status: (resource?.restricted ? "pending_approval" : "confirmed") as BookingStatus,
+      status: initialStatus,
       slot_type: "credit",
-      cost_credits: resource?.credit_cost ?? 1,
-      allocation_score: 0.85,
-      decision_reason: "Mock booking confirmed.",
-      decision_source: "fallback",
+      cost_credits: costCredits,
+      allocation_score: totalScore,
+      decision_reason: decisionReason,
+      decision_source: decisionSource,
       tiebreak: null,
-      policy_version: "v0",
+      policy_version: "v1",
       created_at: now,
       updated_at: now,
     };
 
     sessionBookings.unshift(booking);
-    return { booking, waitlisted: false };
+
+    // Audit log
+    sessionAuditLogs.unshift({
+      id: `audit_${Date.now()}`,
+      actor_id: user.uid,
+      action: waitlisted ? "waitlist_joined" : "booking_created",
+      entity_type: "booking",
+      entity_id: bookingId,
+      reason: decisionReason,
+      rule_version: "v1",
+      created_at: now,
+    });
+
+    return { booking, waitlisted };
   }
 
   async cancelRequest(
@@ -156,16 +462,271 @@ export class MockWorkflowAdapter implements WorkflowDataAdapter {
       throw new Error("Unauthorized: you can only cancel your own bookings");
     }
 
+    // Status transition check
+    assertTransition(booking.status, "cancelled");
+
     booking.status = "cancelled";
-    booking.updated_at = new Date().toISOString();
-    if (reason) {
-      booking.decision_reason = reason;
+    const now = new Date().toISOString();
+    booking.updated_at = now;
+    booking.decision_reason = reason ?? "Cancelled by user";
+
+    // Refund credits
+    const creditsRefunded = booking.cost_credits;
+    if (creditsRefunded > 0) {
+      sessionUserCredits[booking.user_id] = (sessionUserCredits[booking.user_id] ?? 10) + creditsRefunded;
+    }
+
+    // ─── Automatic Waitlist Promotion ────────────────────────────────────
+    const slotId = booking.slot_ids[0];
+    if (slotId) {
+      const waitlistCandidates = sessionWaitlist
+        .filter((w) => w.slot_id === slotId)
+        .sort((a, b) => a.position - b.position);
+
+      if (waitlistCandidates.length > 0) {
+        const topCandidate = waitlistCandidates[0];
+        const candidateBooking = sessionBookings.find((b) => b.id === topCandidate.booking_id);
+
+        if (candidateBooking && candidateBooking.status === "waitlisted") {
+          // Promote waitlisted booking!
+          candidateBooking.status = "confirmed";
+          candidateBooking.cost_credits = booking.cost_credits;
+          candidateBooking.updated_at = now;
+          candidateBooking.decision_reason = "Promoted from waitlist following slot cancellation.";
+
+          // Deduct credits for promoted candidate
+          if (candidateBooking.cost_credits > 0) {
+            const currentBal = sessionUserCredits[candidateBooking.user_id] ?? 10;
+            sessionUserCredits[candidateBooking.user_id] = Math.max(0, currentBal - candidateBooking.cost_credits);
+          }
+
+          // Remove from waitlist
+          const wlIndex = sessionWaitlist.findIndex((w) => w.id === topCandidate.id);
+          if (wlIndex !== -1) sessionWaitlist.splice(wlIndex, 1);
+
+          // Promotion notification
+          sessionNotifications.unshift({
+            id: `notif_${Date.now()}`,
+            user_id: candidateBooking.user_id,
+            type: "waitlist_promoted",
+            title: "Waitlist Slot Available & Confirmed!",
+            body: `Your booking for slot ${slotId} has been automatically promoted and confirmed.`,
+            link: `/requests/${candidateBooking.id}`,
+            read: false,
+            created_at: now,
+          });
+
+          // Audit log for promotion
+          sessionAuditLogs.unshift({
+            id: `audit_prom_${Date.now()}`,
+            actor_id: "system",
+            action: "waitlist_promoted",
+            entity_type: "booking",
+            entity_id: candidateBooking.id,
+            reason: `Promoted after booking ${id} cancellation`,
+            rule_version: "v1",
+            created_at: now,
+          });
+        }
+      }
     }
 
     return {
       booking: { ...booking },
-      credits_refunded: booking.cost_credits,
+      credits_refunded: creditsRefunded,
     };
+  }
+
+  async approveBooking(id: string, actor: AuthUser, note?: string): Promise<{ booking: Booking }> {
+    const booking = sessionBookings.find((b) => b.id === id);
+    if (!booking) throw new Error(`Booking ${id} not found`);
+
+    assertTransition(booking.status, "confirmed");
+
+    booking.status = "confirmed";
+    booking.updated_at = new Date().toISOString();
+    booking.decision_reason = note || "Approved by coordinator";
+
+    sessionAuditLogs.unshift({
+      id: `audit_${Date.now()}`,
+      actor_id: actor.uid,
+      action: "booking_approved",
+      entity_type: "booking",
+      entity_id: id,
+      reason: note || "Coordinator approval granted",
+      rule_version: "v1",
+      created_at: booking.updated_at,
+    });
+
+    sessionNotifications.unshift({
+      id: `notif_${Date.now()}`,
+      user_id: booking.user_id,
+      type: "booking_approved",
+      title: "Booking Request Approved",
+      body: `Your booking request ${id} has been approved by the resource coordinator.`,
+      link: `/requests/${id}`,
+      read: false,
+      created_at: booking.updated_at,
+    });
+
+    return { booking: { ...booking } };
+  }
+
+  async rejectBooking(id: string, actor: AuthUser, reason?: string): Promise<{ booking: Booking; credits_refunded: number }> {
+    const booking = sessionBookings.find((b) => b.id === id);
+    if (!booking) throw new Error(`Booking ${id} not found`);
+
+    assertTransition(booking.status, "rejected");
+
+    booking.status = "rejected";
+    booking.updated_at = new Date().toISOString();
+    booking.decision_reason = reason || "Rejected by coordinator";
+
+    const creditsRefunded = booking.cost_credits;
+    if (creditsRefunded > 0) {
+      sessionUserCredits[booking.user_id] = (sessionUserCredits[booking.user_id] ?? 10) + creditsRefunded;
+    }
+
+    sessionAuditLogs.unshift({
+      id: `audit_${Date.now()}`,
+      actor_id: actor.uid,
+      action: "booking_rejected",
+      entity_type: "booking",
+      entity_id: id,
+      reason: reason || "Coordinator rejected request",
+      rule_version: "v1",
+      created_at: booking.updated_at,
+    });
+
+    sessionNotifications.unshift({
+      id: `notif_${Date.now()}`,
+      user_id: booking.user_id,
+      type: "booking_rejected",
+      title: "Booking Request Rejected",
+      body: `Your booking request ${id} was rejected: ${reason || "No reason provided"}`,
+      link: `/requests/${id}`,
+      read: false,
+      created_at: booking.updated_at,
+    });
+
+    return { booking: { ...booking }, credits_refunded: creditsRefunded };
+  }
+
+  async checkoutBooking(id: string, actor: AuthUser, data: CheckoutData): Promise<{ booking: Booking }> {
+    const booking = sessionBookings.find((b) => b.id === id);
+    if (!booking) throw new Error(`Booking ${id} not found`);
+
+    assertTransition(booking.status, "checked_out");
+
+    booking.status = "checked_out";
+    booking.updated_at = new Date().toISOString();
+    booking.decision_reason = `Checked out. Condition: ${data.itemCondition || "good"}. Notes: ${data.conditionNotes || "none"}`;
+
+    sessionAuditLogs.unshift({
+      id: `audit_${Date.now()}`,
+      actor_id: actor.uid,
+      action: "booking_checked_out",
+      entity_type: "booking",
+      entity_id: id,
+      reason: data.conditionNotes || "Item checked out in verified condition",
+      rule_version: "v1",
+      created_at: booking.updated_at,
+    });
+
+    return { booking: { ...booking } };
+  }
+
+  async checkinBooking(id: string, actor: AuthUser, data: CheckinData): Promise<{ booking: Booking }> {
+    const booking = sessionBookings.find((b) => b.id === id);
+    if (!booking) throw new Error(`Booking ${id} not found`);
+
+    assertTransition(booking.status, "returned");
+
+    booking.status = "returned";
+    booking.updated_at = new Date().toISOString();
+    booking.decision_reason = `Returned. Final Condition: ${data.itemCondition || "good"}. Notes: ${data.conditionNotes || "none"}`;
+
+    sessionAuditLogs.unshift({
+      id: `audit_${Date.now()}`,
+      actor_id: actor.uid,
+      action: "booking_returned",
+      entity_type: "booking",
+      entity_id: id,
+      reason: data.conditionNotes || "Item returned and inspected",
+      rule_version: "v1",
+      created_at: booking.updated_at,
+    });
+
+    return { booking: { ...booking } };
+  }
+
+  async listWaitlist(resourceId?: string, slotId?: string): Promise<WaitlistEntry[]> {
+    let list = [...sessionWaitlist];
+    if (resourceId) list = list.filter((w) => w.resource_id === resourceId);
+    if (slotId) list = list.filter((w) => w.slot_id === slotId);
+    return list;
+  }
+
+  async joinWaitlist(resourceId: string, slotId: string, user: AuthUser): Promise<{ waitlistEntry: WaitlistEntry }> {
+    const existing = sessionWaitlist.filter((w) => w.slot_id === slotId);
+    const entry: WaitlistEntry = {
+      id: `wl_${++nextWaitlistId}`,
+      resource_id: resourceId,
+      slot_id: slotId,
+      booking_id: `bk_mock_wl_${nextWaitlistId}`,
+      user_id: user.uid,
+      position: existing.length + 1,
+      score: 0.5,
+      created_at: new Date().toISOString(),
+    };
+    sessionWaitlist.push(entry);
+    return { waitlistEntry: entry };
+  }
+
+  async reportIssue(bookingId: string, user: AuthUser, description: string, severity = "medium") {
+    const record = {
+      id: `issue_${Date.now()}`,
+      booking_id: bookingId,
+      reporter_id: user.uid,
+      description,
+      severity,
+      created_at: new Date().toISOString(),
+    };
+    sessionAuditLogs.unshift({
+      id: `audit_${Date.now()}`,
+      actor_id: user.uid,
+      action: "issue_reported",
+      entity_type: "booking",
+      entity_id: bookingId,
+      reason: `[${severity.toUpperCase()}] ${description}`,
+      rule_version: "v1",
+      created_at: record.created_at,
+    });
+    return record;
+  }
+
+  async resolveConflict(conflictId: string, actor: AuthUser, resolution: string, overrideReason: string) {
+    if (!overrideReason || overrideReason.trim().length === 0) {
+      throw new Error("Administrative override requires a documented reason.");
+    }
+    const record = {
+      conflict_id: conflictId,
+      resolved_by: actor.uid,
+      resolution,
+      override_reason: overrideReason,
+      resolved_at: new Date().toISOString(),
+    };
+    sessionAuditLogs.unshift({
+      id: `audit_${Date.now()}`,
+      actor_id: actor.uid,
+      action: "conflict_override",
+      entity_type: "conflict",
+      entity_id: conflictId,
+      reason: `Resolution: ${resolution}. Reason: ${overrideReason}`,
+      rule_version: "v1",
+      created_at: record.resolved_at,
+    });
+    return record;
   }
 }
 
@@ -220,12 +781,10 @@ export class FirebaseWorkflowAdapter implements WorkflowDataAdapter {
     const policy = await getActivePolicy();
     const slotMinutes = policy.slot_minutes || 60;
 
-    // Generate slots from 08:00 to 18:00 UTC for the given date
     const start = new Date(`${date}T08:00:00Z`);
     const end = new Date(`${date}T18:00:00Z`);
     const slotIds = slotIdsForRange(id, start, end, slotMinutes);
 
-    // Check slot locks in Firestore
     const locksSnap = await slotLocksCol().get();
     const lockedIds = new Set(locksSnap.docs.map((d) => d.id));
 
@@ -253,6 +812,89 @@ export class FirebaseWorkflowAdapter implements WorkflowDataAdapter {
     }
 
     return slots;
+  }
+
+  async checkEligibility(
+    userId: string,
+    resourceId: string,
+    slotStart?: string,
+    slotEnd?: string,
+  ): Promise<EligibilityResult> {
+    const { getResourceById } = await import("@/lib/db/resources");
+    const { getUserById } = await import("@/lib/db/users");
+    const { hasTraining } = await import("@/lib/db/training");
+    const { getActivePolicy } = await import("@/lib/db/policy");
+    const { bookingsCol } = await import("@/lib/db/collections");
+
+    const resource = await getResourceById(resourceId);
+    if (!resource) throw new Error(`Resource "${resourceId}" not found`);
+
+    const user = await getUserById(userId);
+    const policy = await getActivePolicy();
+    const reasons: string[] = [];
+
+    const accountActive = user ? user.active : true;
+    if (!accountActive) {
+      reasons.push("Account is deactivated. Contact campus facilities administrator.");
+    }
+
+    let trainingVerified = true;
+    if (resource.requires_training) {
+      trainingVerified = await hasTraining(userId, resource.requires_training);
+      if (!trainingVerified) {
+        reasons.push(`Missing mandatory certification: "${resource.requires_training}".`);
+      }
+    }
+
+    const activeSnaps = await bookingsCol()
+      .where("user_id", "==", userId)
+      .where("status", "in", ["confirmed", "allocated", "pending_approval"])
+      .get();
+    const bookingLimitPassed = activeSnaps.size < policy.max_active_bookings;
+    if (!bookingLimitPassed) {
+      reasons.push(`Active booking limit reached (${policy.max_active_bookings}).`);
+    }
+
+    const creditBalance = user ? user.credit_balance : 10;
+    const hasSufficientCredits = creditBalance >= resource.credit_cost;
+    if (!hasSufficientCredits) {
+      reasons.push(`Insufficient credits. Required: ${resource.credit_cost}, balance: ${creditBalance}.`);
+    }
+
+    let noOverlap = true;
+    if (slotStart && slotEnd) {
+      const startMs = new Date(slotStart).getTime();
+      const endMs = new Date(slotEnd).getTime();
+      for (const doc of activeSnaps.docs) {
+        const data = doc.data();
+        const bStart = data.slot_start?.toDate?.() ? data.slot_start.toDate().getTime() : new Date(data.slot_start).getTime();
+        const bEnd = data.slot_end?.toDate?.() ? data.slot_end.toDate().getTime() : new Date(data.slot_end).getTime();
+        if (startMs < bEnd && endMs > bStart) {
+          noOverlap = false;
+          reasons.push("Overlapping booking detected in the requested time frame.");
+          break;
+        }
+      }
+    }
+
+    const eligible = accountActive && trainingVerified && bookingLimitPassed && hasSufficientCredits && noOverlap;
+
+    return {
+      eligible,
+      reasons,
+      user_id: userId,
+      resource_id: resourceId,
+      checks: {
+        account_active: accountActive,
+        training_verified: trainingVerified,
+        training_required: resource.requires_training,
+        credit_balance: creditBalance,
+        credit_cost: resource.credit_cost,
+        has_sufficient_credits: hasSufficientCredits,
+        booking_limit_passed: bookingLimitPassed,
+        no_overlap: noOverlap,
+      },
+    };
   }
 
   async listRequests(userId?: string): Promise<Booking[]> {
@@ -339,12 +981,9 @@ export class FirebaseWorkflowAdapter implements WorkflowDataAdapter {
     const bookingId = bookingRef.id;
     const idempotencyKey = `charge_${bookingId}`;
 
-    // 5. Execute composite Firestore transaction
     return await adminDb.runTransaction(async (tx) => {
-      // Read 1: Credit state
       const creditState = await readCreditState(tx, user.uid, idempotencyKey);
 
-      // Read 2: Check active booking limit
       const activeSnaps = await tx.get(
         bookingsCol()
           .where("user_id", "==", user.uid)
@@ -356,13 +995,11 @@ export class FirebaseWorkflowAdapter implements WorkflowDataAdapter {
         );
       }
 
-      // Read 3 & Write 1: Try acquiring slot locks
       let waitlisted = false;
       try {
         await acquireSlotLocks(tx, bookingId, user.uid, slotIds);
       } catch (err) {
         if (err instanceof SlotTakenError) {
-          // Slot is contested: create waitlist entry
           waitlisted = true;
           await createWaitlistEntry(
             {
@@ -381,7 +1018,6 @@ export class FirebaseWorkflowAdapter implements WorkflowDataAdapter {
         }
       }
 
-      // Write 2: Apply credit deduction if not waitlisted and cost > 0
       const costCredits = waitlisted ? 0 : resource.credit_cost;
       if (!waitlisted && costCredits > 0) {
         writeCredit(tx, creditState, {
@@ -393,7 +1029,6 @@ export class FirebaseWorkflowAdapter implements WorkflowDataAdapter {
         });
       }
 
-      // Write 3: Create booking
       const initialStatus: BookingStatus = waitlisted
         ? "waitlisted"
         : resource.restricted
@@ -429,7 +1064,6 @@ export class FirebaseWorkflowAdapter implements WorkflowDataAdapter {
         tx,
       );
 
-      // Write 4: Audit log
       await writeAudit(tx, {
         actor_id: user.uid,
         action: "booking_created",
@@ -451,33 +1085,29 @@ export class FirebaseWorkflowAdapter implements WorkflowDataAdapter {
     const { adminDb } = await import("@/lib/firebase/admin");
     const { getBookingByIdTx, updateBookingStatus } = await import("@/lib/db/bookings");
     const { getActivePolicy } = await import("@/lib/db/policy");
-    const { releaseSlotLocks } = await import("@/lib/db/slots");
+    const { releaseSlotLocks, acquireSlotLocks } = await import("@/lib/db/slots");
     const { readCreditState, writeCredit } = await import("@/lib/db/ledger");
     const { assertTransition } = await import("@/lib/types/status");
     const { writeAudit } = await import("@/lib/db/audit");
+    const { listWaitlistForSlot, deleteWaitlistEntry } = await import("@/lib/db/waitlist");
+    const { createNotification } = await import("@/lib/db/notifications");
 
     const policy = await getActivePolicy();
 
     return await adminDb.runTransaction(async (tx) => {
       const booking = await getBookingByIdTx(tx, id);
-      if (!booking) {
-        throw new Error(`Booking ${id} not found`);
-      }
+      if (!booking) throw new Error(`Booking ${id} not found`);
 
-      // Authorization check
       if (booking.user_id !== user.uid && user.role === "student") {
         throw new Error("Unauthorized: you can only cancel your own bookings");
       }
 
-      // Legal status transition assertion
       assertTransition(booking.status, "cancelled");
 
-      // Release slot locks
       if (booking.slot_ids && booking.slot_ids.length > 0) {
         releaseSlotLocks(tx, booking.slot_ids);
       }
 
-      // Calculate refund
       const now = new Date();
       const slotStart = new Date(booking.slot_start);
       const hoursUntilStart = (slotStart.getTime() - now.getTime()) / (3600 * 1000);
@@ -499,7 +1129,6 @@ export class FirebaseWorkflowAdapter implements WorkflowDataAdapter {
         });
       }
 
-      // Update booking status
       await updateBookingStatus(
         id,
         "cancelled",
@@ -509,7 +1138,6 @@ export class FirebaseWorkflowAdapter implements WorkflowDataAdapter {
         tx,
       );
 
-      // Audit log
       await writeAudit(tx, {
         actor_id: user.uid,
         action: "booking_cancelled",
@@ -518,6 +1146,69 @@ export class FirebaseWorkflowAdapter implements WorkflowDataAdapter {
         rule_version: `v${policy.version}`,
         reason: _reason ?? "User cancelled booking",
       });
+
+      // ─── Automatic Waitlist Promotion ──────────────────────────────────
+      const slotId = booking.slot_ids?.[0];
+      if (slotId) {
+        const waitlistEntries = await listWaitlistForSlot(booking.resource_id, slotId);
+        if (waitlistEntries.length > 0) {
+          const topEntry = waitlistEntries[0];
+          const promotedBooking = await getBookingByIdTx(tx, topEntry.booking_id);
+
+          if (promotedBooking && promotedBooking.status === "waitlisted") {
+            try {
+              await acquireSlotLocks(tx, promotedBooking.id, promotedBooking.user_id, booking.slot_ids);
+              const chargeKey = `charge_promote_${promotedBooking.id}`;
+              const candidateCredit = await readCreditState(tx, promotedBooking.user_id, chargeKey);
+              if (booking.cost_credits > 0) {
+                writeCredit(tx, candidateCredit, {
+                  userId: promotedBooking.user_id,
+                  delta: -booking.cost_credits,
+                  reason: "booking_charge",
+                  bookingId: promotedBooking.id,
+                  idempotencyKey: chargeKey,
+                });
+              }
+
+              await updateBookingStatus(
+                promotedBooking.id,
+                "confirmed",
+                {
+                  cost_credits: booking.cost_credits,
+                  decision_reason: "Promoted from waitlist after slot cancellation.",
+                },
+                tx,
+              );
+
+              await deleteWaitlistEntry(topEntry.id, tx);
+
+              await createNotification(
+                {
+                  user_id: promotedBooking.user_id,
+                  type: "waitlist_promoted",
+                  title: "Waitlist Slot Confirmed!",
+                  body: `Your booking for slot ${slotId} has been confirmed following a cancellation.`,
+                  link: `/requests/${promotedBooking.id}`,
+                  read: false,
+                },
+                undefined,
+                tx,
+              );
+
+              await writeAudit(tx, {
+                actor_id: "system",
+                action: "booking_status_changed",
+                entity_type: "booking",
+                entity_id: promotedBooking.id,
+                reason: `Promoted following cancellation of ${id}`,
+                rule_version: `v${policy.version}`,
+              });
+            } catch (promoteErr) {
+              console.warn("Could not promote waitlist candidate in cancellation transaction:", promoteErr);
+            }
+          }
+        }
+      }
 
       return {
         booking: {
@@ -528,6 +1219,241 @@ export class FirebaseWorkflowAdapter implements WorkflowDataAdapter {
         credits_refunded: creditsRefunded,
       };
     });
+  }
+
+  async approveBooking(id: string, actor: AuthUser, note?: string): Promise<{ booking: Booking }> {
+    const { getBookingById, updateBookingStatus } = await import("@/lib/db/bookings");
+    const { writeAudit } = await import("@/lib/db/audit");
+    const { createNotification } = await import("@/lib/db/notifications");
+    const { assertTransition } = await import("@/lib/types/status");
+
+    const booking = await getBookingById(id);
+    if (!booking) throw new Error(`Booking ${id} not found`);
+
+    assertTransition(booking.status, "confirmed");
+
+    await updateBookingStatus(id, "confirmed", {
+      decision_reason: note || "Approved by coordinator",
+      decision_source: "fallback",
+    });
+
+    await writeAudit(undefined, {
+      actor_id: actor.uid,
+      action: "approval_decided",
+      entity_type: "booking",
+      entity_id: id,
+      reason: note || "approved",
+    });
+
+    await createNotification({
+      user_id: booking.user_id,
+      type: "booking_confirmed",
+      title: "Booking Request Approved",
+      body: `Your request for ${booking.resource_id} has been approved.`,
+      link: `/requests/${id}`,
+      read: false,
+    });
+
+    return { booking: { ...booking, status: "confirmed" } };
+  }
+
+  async rejectBooking(id: string, actor: AuthUser, reason?: string): Promise<{ booking: Booking; credits_refunded: number }> {
+    const { adminDb } = await import("@/lib/firebase/admin");
+    const { getBookingByIdTx, updateBookingStatus } = await import("@/lib/db/bookings");
+    const { releaseSlotLocks } = await import("@/lib/db/slots");
+    const { readCreditState, writeCredit } = await import("@/lib/db/ledger");
+    const { assertTransition } = await import("@/lib/types/status");
+    const { writeAudit } = await import("@/lib/db/audit");
+    const { createNotification } = await import("@/lib/db/notifications");
+
+    return await adminDb.runTransaction(async (tx) => {
+      const booking = await getBookingByIdTx(tx, id);
+      if (!booking) throw new Error(`Booking ${id} not found`);
+
+      assertTransition(booking.status, "rejected");
+
+      if (booking.slot_ids && booking.slot_ids.length > 0) {
+        releaseSlotLocks(tx, booking.slot_ids);
+      }
+
+      let creditsRefunded = 0;
+      if (booking.cost_credits > 0) {
+        creditsRefunded = booking.cost_credits;
+        const refundKey = `refund_rejection_${id}`;
+        const creditState = await readCreditState(tx, booking.user_id, refundKey);
+        writeCredit(tx, creditState, {
+          userId: booking.user_id,
+          delta: creditsRefunded,
+          reason: "refund_coordinator_cancel",
+          bookingId: id,
+          idempotencyKey: refundKey,
+        });
+      }
+
+      await updateBookingStatus(
+        id,
+        "rejected",
+        {
+          decision_reason: reason || "Rejected by coordinator",
+        },
+        tx,
+      );
+
+      await writeAudit(tx, {
+        actor_id: actor.uid,
+        action: "approval_decided",
+        entity_type: "booking",
+        entity_id: id,
+        reason: reason || "Rejected",
+      });
+
+      await createNotification(
+        {
+          user_id: booking.user_id,
+          type: "booking_rejected",
+          title: "Booking Request Rejected",
+          body: `Your booking request ${id} was rejected: ${reason || "No reason provided."}`,
+          link: `/requests/${id}`,
+          read: false,
+        },
+        undefined,
+        tx,
+      );
+
+      return {
+        booking: { ...booking, status: "rejected" },
+        credits_refunded: creditsRefunded,
+      };
+    });
+  }
+
+  async checkoutBooking(id: string, actor: AuthUser, data: CheckoutData): Promise<{ booking: Booking }> {
+    const { getBookingById, updateBookingStatus } = await import("@/lib/db/bookings");
+    const { writeAudit } = await import("@/lib/db/audit");
+    const { assertTransition } = await import("@/lib/types/status");
+
+    const booking = await getBookingById(id);
+    if (!booking) throw new Error(`Booking ${id} not found`);
+
+    assertTransition(booking.status, "checked_out");
+
+    await updateBookingStatus(id, "checked_out", {
+      decision_reason: `Checked out. Condition: ${data.itemCondition || "good"}. Notes: ${data.conditionNotes || "none"}`,
+    });
+
+    await writeAudit(undefined, {
+      actor_id: actor.uid,
+      action: "checkout",
+      entity_type: "booking",
+      entity_id: id,
+      reason: data.conditionNotes || "Item checked out in verified condition",
+    });
+
+    return { booking: { ...booking, status: "checked_out" } };
+  }
+
+  async checkinBooking(id: string, actor: AuthUser, data: CheckinData): Promise<{ booking: Booking }> {
+    const { adminDb } = await import("@/lib/firebase/admin");
+    const { getBookingByIdTx, updateBookingStatus } = await import("@/lib/db/bookings");
+    const { releaseSlotLocks } = await import("@/lib/db/slots");
+    const { writeAudit } = await import("@/lib/db/audit");
+    const { assertTransition } = await import("@/lib/types/status");
+
+    return await adminDb.runTransaction(async (tx) => {
+      const booking = await getBookingByIdTx(tx, id);
+      if (!booking) throw new Error(`Booking ${id} not found`);
+
+      assertTransition(booking.status, "returned");
+
+      if (booking.slot_ids && booking.slot_ids.length > 0) {
+        releaseSlotLocks(tx, booking.slot_ids);
+      }
+
+      await updateBookingStatus(
+        id,
+        "returned",
+        {
+          decision_reason: `Returned. Final Condition: ${data.itemCondition || "good"}. Notes: ${data.conditionNotes || "none"}`,
+        },
+        tx,
+      );
+
+      await writeAudit(tx, {
+        actor_id: actor.uid,
+        action: "return",
+        entity_type: "booking",
+        entity_id: id,
+        reason: data.conditionNotes || "Item returned and inspected",
+      });
+
+      return { booking: { ...booking, status: "returned" } };
+    });
+  }
+
+  async listWaitlist(resourceId?: string, slotId?: string): Promise<WaitlistEntry[]> {
+    const { waitlistCol } = await import("@/lib/db/collections");
+    const { docToEntity } = await import("@/lib/db/converters");
+    let query = waitlistCol().orderBy("position", "asc");
+    if (resourceId) query = query.where("resource_id", "==", resourceId);
+    if (slotId) query = query.where("slot_id", "==", slotId);
+    const snap = await query.get();
+    return snap.docs
+      .map((d) => docToEntity<WaitlistEntry>(d.id, d.data()))
+      .filter((e): e is WaitlistEntry => e !== null);
+  }
+
+  async joinWaitlist(resourceId: string, slotId: string, user: AuthUser): Promise<{ waitlistEntry: WaitlistEntry }> {
+    const { createWaitlistEntry, listWaitlistForSlot } = await import("@/lib/db/waitlist");
+    const existing = await listWaitlistForSlot(resourceId, slotId);
+    const entry = await createWaitlistEntry({
+      resource_id: resourceId,
+      slot_id: slotId,
+      booking_id: `wl_req_${Date.now()}`,
+      user_id: user.uid,
+      position: existing.length + 1,
+      score: 0.5,
+    });
+    return { waitlistEntry: entry };
+  }
+
+  async reportIssue(bookingId: string, user: AuthUser, description: string, severity = "medium") {
+    const { writeAudit } = await import("@/lib/db/audit");
+    await writeAudit(undefined, {
+      actor_id: user.uid,
+      action: "issue_reported",
+      entity_type: "booking",
+      entity_id: bookingId,
+      reason: `[${severity.toUpperCase()}] ${description}`,
+    });
+    return {
+      id: `issue_${Date.now()}`,
+      booking_id: bookingId,
+      reporter_id: user.uid,
+      description,
+      severity,
+      created_at: new Date().toISOString(),
+    };
+  }
+
+  async resolveConflict(conflictId: string, actor: AuthUser, resolution: string, overrideReason: string) {
+    if (!overrideReason || overrideReason.trim().length === 0) {
+      throw new Error("Administrative override requires a documented reason.");
+    }
+    const { writeAudit } = await import("@/lib/db/audit");
+    await writeAudit(undefined, {
+      actor_id: actor.uid,
+      action: "booking_status_changed",
+      entity_type: "conflict",
+      entity_id: conflictId,
+      reason: `Resolution: ${resolution}. Reason: ${overrideReason}`,
+    });
+    return {
+      conflict_id: conflictId,
+      resolved_by: actor.uid,
+      resolution,
+      override_reason: overrideReason,
+      resolved_at: new Date().toISOString(),
+    };
   }
 }
 
@@ -567,6 +1493,10 @@ class DynamicWorkflowAdapter implements WorkflowDataAdapter {
     return this.delegate.getResourceSlots(id, date);
   }
 
+  checkEligibility(userId: string, resourceId: string, slotStart?: string, slotEnd?: string) {
+    return this.delegate.checkEligibility(userId, resourceId, slotStart, slotEnd);
+  }
+
   listRequests(userId?: string) {
     return this.delegate.listRequests(userId);
   }
@@ -582,6 +1512,42 @@ class DynamicWorkflowAdapter implements WorkflowDataAdapter {
   cancelRequest(id: string, user: AuthUser, reason?: string) {
     return this.delegate.cancelRequest(id, user, reason);
   }
+
+  approveBooking(id: string, actor: AuthUser, note?: string) {
+    return this.delegate.approveBooking(id, actor, note);
+  }
+
+  rejectBooking(id: string, actor: AuthUser, reason?: string) {
+    return this.delegate.rejectBooking(id, actor, reason);
+  }
+
+  checkoutBooking(id: string, actor: AuthUser, data: CheckoutData) {
+    return this.delegate.checkoutBooking(id, actor, data);
+  }
+
+  checkinBooking(id: string, actor: AuthUser, data: CheckinData) {
+    return this.delegate.checkinBooking(id, actor, data);
+  }
+
+  listWaitlist(resourceId?: string, slotId?: string) {
+    return this.delegate.listWaitlist(resourceId, slotId);
+  }
+
+  joinWaitlist(resourceId: string, slotId: string, user: AuthUser) {
+    return this.delegate.joinWaitlist(resourceId, slotId, user);
+  }
+
+  reportIssue(bookingId: string, user: AuthUser, description: string, severity?: string) {
+    return this.delegate.reportIssue(bookingId, user, description, severity);
+  }
+
+  resolveConflict(conflictId: string, actor: AuthUser, resolution: string, overrideReason: string) {
+    return this.delegate.resolveConflict(conflictId, actor, resolution, overrideReason);
+  }
 }
 
 export const workflowAdapter: WorkflowDataAdapter = new DynamicWorkflowAdapter();
+
+export function getWorkflowAdapter(): WorkflowDataAdapter {
+  return workflowAdapter;
+}

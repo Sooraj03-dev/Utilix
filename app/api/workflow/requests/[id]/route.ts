@@ -8,33 +8,14 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { workflowAdapter } from "@/app/(workflow)/_lib/workflow-adapter";
-import type { AuthUser } from "@/app/(workflow)/_lib/types";
-import { AuthError } from "@/lib/auth/require-user";
-
-async function getCaller(request: NextRequest): Promise<AuthUser> {
-  const useMock =
-    process.env.USE_MOCK_DATA === "true" ||
-    process.env.NEXT_PUBLIC_USE_MOCK_DATA === "true";
-
-  if (useMock) {
-    return {
-      uid: "user_alice",
-      name: "Alice Chen",
-      email: "alice@university.edu",
-      role: "student",
-    };
-  }
-
-  const { requireUser } = await import("@/lib/auth/require-user");
-  return requireUser(request);
-}
+import { getWorkflowCaller, AuthError } from "@/app/(workflow)/_lib/auth";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const user = await getCaller(request);
+    const user = await getWorkflowCaller(request);
     const { id } = await params;
 
     const booking = await workflowAdapter.getRequest(id);

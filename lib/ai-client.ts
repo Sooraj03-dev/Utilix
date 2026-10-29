@@ -75,13 +75,22 @@ export class AIServiceTimeoutError extends AIServiceError {
 
 // ─── Mock / Fallback Implementation ──────────────────────────────────────
 
-function mockDelay(ms: number = 300): Promise<void> {
+function mockDelay(ms: number = 50): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function stableHash(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
 }
 
 export class MockAIClient implements AIClient {
   async healthCheck() {
-    await mockDelay(50);
+    await mockDelay(20);
     return {
       ok: true,
       service: "ai-service-fallback",
@@ -90,47 +99,183 @@ export class MockAIClient implements AIClient {
   }
 
   async allocate(request: AIAllocateRequest): Promise<AIAllocateResponse> {
-    await mockDelay(150);
+    await mockDelay(30);
 
-    const ranked: AIRankingItem[] = request.requests.map((req, i) => ({
-      requestId: req.id,
-      userId: req.userId,
-      rank: i + 1,
-      totalScore: Number(Math.max(0.2, 1 - i * 0.15).toFixed(4)),
-      scoreBreakdown: {
-        usage: Number(Math.max(0.1, 0.9 - (req.sessionsThisMonth ?? 0) * 0.1).toFixed(4)),
-        waiting: Number(Math.min(1, 0.2 + (req.waitingHours ?? 0) * 0.05).toFixed(4)),
-        need: Number(((req.projectNeedScore ?? 5) / 10).toFixed(4)),
-        diversity: req.isPriorityGroup ? 0.9 : 0.4,
-      },
-      studentReason:
-        i === 0
-          ? "Your request was prioritised based on fair-usage balance and project need."
-          : `Contention queue position #${i + 1}. Consider alternative time slots for faster access.`,
-      coordinatorSummary: `Ranked #${i + 1} by fairness scoring heuristics.`,
-      decidedBy: "scoring",
-      tiedWith: [],
-      explanationSource: "fallback",
-    }));
+    const rawWeights = (request.policy?.weights || {}) as Record<string, number | undefined>;
+    const weights = {
+      usage: rawWeights.usage ?? rawWeights.usage_fairness ?? 0.35,
+      waiting: rawWeights.waiting ?? rawWeights.waiting_time ?? 0.25,
+      need: rawWeights.need ?? rawWeights.declared_need ?? 0.20,
+      diversity: rawWeights.diversity ?? rawWeights.interdisciplinary_bonus ?? 0.20,
+    };
+    const seed = request.seed ?? request.policy?.seed ?? "utilix";
+    const epsilon = request.policy?.epsilon ?? 0.0001;
 
+    // 1. Filter hard constraints
+    const eligible: typeof request.requests = [];
+    const excluded: AIAllocateResponse["excluded"] = [];
+
+    for (const req of request.requests) {
+      if (req.resourceAvailable === false) {
+        excluded.push({
+          requestId: req.id,
+          userId: req.userId,
+          reason: "Resource is unavailable or undergoing maintenance.",
+          code: "RESOURCE_UNAVAILABLE",
+        });
+        continue;
+      }
+      if (req.trainingVerified === false) {
+        excluded.push({
+          requestId: req.id,
+          userId: req.userId,
+          reason: "Mandatory equipment training is not verified for this resource.",
+          code: "TRAINING_MISSING",
+        });
+        continue;
+      }
+      if (req.withinBookingLimit === false) {
+        excluded.push({
+          requestId: req.id,
+          userId: req.userId,
+          reason: "User has reached the maximum allowed concurrent active bookings.",
+          code: "BOOKING_LIMIT_REACHED",
+        });
+        continue;
+      }
+      if (req.noOverlap === false) {
+        excluded.push({
+          requestId: req.id,
+          userId: req.userId,
+          reason: "Conflicting overlapping reservation found for user.",
+          code: "OVERLAPPING_BOOKING",
+        });
+        continue;
+      }
+      eligible.push(req);
+    }
+
+    // 2. Score eligible requests
+    interface ScoredItem {
+      req: typeof request.requests[number];
+      usageScore: number;
+      waitingScore: number;
+      needScore: number;
+      diversityScore: number;
+      totalScore: number;
+      decidedBy: "scoring" | "tiebreak";
+    }
+
+    const scored: ScoredItem[] = eligible.map((req) => {
+      const sessions = req.sessionsThisMonth ?? 0;
+      const waitingHours = req.waitingHours ?? 0;
+      const need = req.projectNeedScore ?? 5.0;
+      const isPriority = req.isPriorityGroup ?? false;
+
+      const usageScore = Number(Math.max(0, 1.0 - Math.min(sessions, 10) / 10.0).toFixed(4));
+      const waitingScore = Number(Math.min(1.0, waitingHours / 48.0).toFixed(4));
+      const needScore = Number(Math.min(1.0, Math.max(0, need / 10.0)).toFixed(4));
+      const diversityScore = isPriority ? 1.0 : 0.5;
+
+      const totalScore = Number(
+        (
+          weights.usage * usageScore +
+          weights.waiting * waitingScore +
+          weights.need * needScore +
+          weights.diversity * diversityScore
+        ).toFixed(4),
+      );
+
+      return {
+        req,
+        usageScore,
+        waitingScore,
+        needScore,
+        diversityScore,
+        totalScore,
+        decidedBy: "scoring",
+      };
+    });
+
+    // 3. Deterministic Sorting with Tiebreakers
+    scored.sort((a, b) => {
+      const diff = b.totalScore - a.totalScore;
+      if (Math.abs(diff) > epsilon) {
+        return diff;
+      }
+
+      // Tiebreaker 1: Fewest sessions this month
+      const aSessions = a.req.sessionsThisMonth ?? 0;
+      const bSessions = b.req.sessionsThisMonth ?? 0;
+      if (aSessions !== bSessions) {
+        a.decidedBy = "tiebreak";
+        b.decidedBy = "tiebreak";
+        return aSessions - bSessions;
+      }
+
+      // Tiebreaker 2: Earliest submission time
+      const aTime = new Date(a.req.submittedAt).getTime();
+      const bTime = new Date(b.req.submittedAt).getTime();
+      if (!isNaN(aTime) && !isNaN(bTime) && aTime !== bTime) {
+        a.decidedBy = "tiebreak";
+        b.decidedBy = "tiebreak";
+        return aTime - bTime;
+      }
+
+      // Tiebreaker 3: Seeded deterministic hash
+      a.decidedBy = "tiebreak";
+      b.decidedBy = "tiebreak";
+      return stableHash(`${seed}_${a.req.id}`) - stableHash(`${seed}_${b.req.id}`);
+    });
+
+    // 4. Construct Ranking Items
     const capacity = request.slot.capacity ?? 1;
+    const ranked: AIRankingItem[] = scored.map((item, idx) => {
+      const rank = idx + 1;
+      const isWinner = rank <= capacity;
+
+      const studentReason = isWinner
+        ? `Request awarded slot (Rank #${rank}): Strong fairness score (${item.totalScore}) with ${item.req.sessionsThisMonth ?? 0} prior sessions and ${item.req.waitingHours ?? 0}h waiting time.`
+        : `Placed on waitlist (Position #${rank - capacity}): Contention resolved by fair usage policy. Lower prior sessions or alternative slots recommended.`;
+
+      const coordinatorSummary = `Rank #${rank} (Score: ${item.totalScore}) — Usage: ${item.usageScore}, Waiting: ${item.waitingScore}, Need: ${item.needScore}, Diversity: ${item.diversityScore}. Decided by ${item.decidedBy}.`;
+
+      return {
+        requestId: item.req.id,
+        userId: item.req.userId,
+        rank,
+        totalScore: item.totalScore,
+        scoreBreakdown: {
+          usage: item.usageScore,
+          waiting: item.waitingScore,
+          need: item.needScore,
+          diversity: item.diversityScore,
+        },
+        studentReason,
+        coordinatorSummary,
+        decidedBy: item.decidedBy,
+        tiedWith: [],
+        explanationSource: "fallback",
+      };
+    });
+
     return {
       allocated: ranked.slice(0, capacity),
       waitlist: ranked.slice(capacity),
-      excluded: [],
+      excluded,
       audit: {
         totalRequests: request.requests.length,
-        eligibleRequests: request.requests.length,
-        excludedRequests: 0,
+        eligibleRequests: eligible.length,
+        excludedRequests: excluded.length,
         capacity,
         policyUsed: request.policy ?? {},
         tieBreakInfo: {
-          tiedGroupsCount: 0,
-          totalTiedRequests: 0,
+          tiedGroupsCount: scored.some((s) => s.decidedBy === "tiebreak") ? 1 : 0,
+          totalTiedRequests: scored.filter((s) => s.decidedBy === "tiebreak").length,
           tiesDecided: [],
-          seedUsed: request.seed ?? "utilix",
+          seedUsed: seed,
         },
-        executionTimeMs: 15,
+        executionTimeMs: 12,
       },
     };
   }
@@ -259,7 +404,18 @@ export class HttpAIClient implements AIClient {
 
   async allocate(request: AIAllocateRequest): Promise<AIAllocateResponse> {
     try {
-      return await this.request<AIAllocateResponse>("/allocate", request);
+      const result = await this.request<AIAllocateResponse>("/allocate", request);
+      return {
+        ...result,
+        allocated: result.allocated.map((item) => ({
+          ...item,
+          explanationSource: item.explanationSource ?? "ai",
+        })),
+        waitlist: result.waitlist.map((item) => ({
+          ...item,
+          explanationSource: item.explanationSource ?? "ai",
+        })),
+      };
     } catch (err) {
       console.warn("[AIClient] /allocate call failed, using deterministic fallback:", err);
       return this.fallback.allocate(request);
