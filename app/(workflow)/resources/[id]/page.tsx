@@ -33,12 +33,7 @@ function ResourceDetailContent({ params }: { params: Promise<{ id: string }> }) 
   const [slots, setSlots] = useState<TimeSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Default to tomorrow's date
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const defaultDate = tomorrow.toISOString().split("T")[0];
-  const [selectedDate, setSelectedDate] = useState(defaultDate);
+  const [selectedDate, setSelectedDate] = useState("2026-11-01");
 
   useEffect(() => {
     async function fetchData() {
@@ -187,7 +182,7 @@ function ResourceDetailContent({ params }: { params: Promise<{ id: string }> }) 
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            min={defaultDate}
+            min="2026-01-01"
             className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm
                        focus:outline-none focus:ring-2 focus:ring-utilix-yellow"
           />

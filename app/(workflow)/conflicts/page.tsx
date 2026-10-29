@@ -1,184 +1,125 @@
 /* ═══════════════════════════════════════════════════════════════════════════
- * Conflicts Page — Scheduling Conflict & Multi-Request Resolution
- * app/(workflow)/conflicts/page.tsx
+ * Conflicts Resolution Page — Scheduling Conflict Overrides
+ * Owner B · app/(workflow)/conflicts/page.tsx
  * ═══════════════════════════════════════════════════════════════════════════ */
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import type { Booking } from "../_lib/types";
-import { useAuth } from "@/lib/auth/context";
-
-interface ConflictGroup {
-  slotKey: string;
-  slotStart: string;
-  resourceName: string;
-  requests: Booking[];
-}
 
 export default function ConflictsPage() {
-  const { user } = useAuth();
-  const [conflictGroups, setConflictGroups] = useState<ConflictGroup[]>([]);
+  const [waitlistedBookings, setWaitlistedBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [resolvingSlot, setResolvingSlot] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const fetchConflicts = async () => {
+  async function fetchConflicts() {
     setLoading(true);
-    setError(null);
     try {
       const res = await fetch("/api/workflow/requests");
       const json = await res.json();
-      if (!json.success && !json.data) {
-        throw new Error(json.error?.message || json.error || "Failed to load requests");
-      }
-      const all: Booking[] = json.data || [];
-
-      // Group active competing requests by resource + slot_start
-      const groups = new Map<string, Booking[]>();
-      all.forEach((b) => {
-        if (b.status === "submitted" || b.status === "allocated" || b.status === "waitlisted" || b.status === "pending_approval") {
-          const key = `${b.resource_id}_${b.slot_start}`;
-          const list = groups.get(key) || [];
-          list.push(b);
-          groups.set(key, list);
-        }
-      });
-
-      const conflicts: ConflictGroup[] = [];
-      groups.forEach((items, key) => {
-        if (items.length > 1) {
-          conflicts.push({
-            slotKey: key,
-            slotStart: items[0].slot_start,
-            resourceName: (items[0] as any).resource_name || items[0].resource_id,
-            requests: items,
-          });
-        }
-      });
-
-      setConflictGroups(conflicts);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load conflicts");
+      const all: Booking[] = json.data ?? [];
+      const contested = all.filter((b) => b.status === "waitlisted");
+      setWaitlistedBookings(contested);
+    } catch {
+      // Ignore
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   useEffect(() => {
-    fetchConflicts();
+    Promise.resolve().then(() => fetchConflicts());
   }, []);
 
-  const handleResolveConflict = async (slotId: string, chosenBookingId: string) => {
-    setResolvingSlot(slotId);
-    setError(null);
-    setSuccessMsg(null);
+  async function handleOverride(bookingId: string) {
+    const overrideReason = prompt("Administrative override reason (MANDATORY for audit log):");
+    if (!overrideReason || overrideReason.trim().length === 0) {
+      alert("Override reason is required by security policy.");
+      return;
+    }
+
+    setActionLoading(bookingId);
     try {
-      const res = await fetch(`/api/workflow/conflicts/${encodeURIComponent(slotId)}/resolve`, {
+      const res = await fetch(`/api/workflow/conflicts/${bookingId}/resolve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          chosen_booking_id: chosenBookingId,
-          reason: "Selected by coordinator via Utilix Fair Allocation panel",
+          resolution: "approve_override",
+          overrideReason,
         }),
       });
       const json = await res.json();
-      if (!res.ok || json.error) {
-        throw new Error(json.error || "Failed to resolve conflict.");
-      }
-      setSuccessMsg(`Conflict resolved! Booking ${chosenBookingId} confirmed, remaining competing requests released & refunded.`);
+      if (!json.success) throw new Error(json.error?.message || "Override failed");
+      alert("Override recorded in immutable audit log.");
       await fetchConflicts();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error resolving conflict");
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Override failed");
     } finally {
-      setResolvingSlot(null);
+      setActionLoading(null);
     }
-  };
+  }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Scheduling Conflict Resolution</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Detect competing student demands for the same time slot and commit tie-breaking resolutions.
-          </p>
-        </div>
-        <button
-          onClick={fetchConflicts}
-          disabled={loading}
-          className="px-3 py-1.5 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition"
-        >
-          {loading ? "Scanning..." : "Scan Slots"}
-        </button>
+    <div className="max-w-4xl mx-auto py-4">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Scheduling Contention & Conflicts</h1>
+        <p className="text-sm text-gray-500">
+          Review contested slots, algorithmic priority rankings, and execute audited administrative overrides.
+        </p>
       </div>
 
-      {user && user.role === "student" && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
-          ⚠️ <strong>Student View Notice:</strong> Conflict adjudication is reserved for Coordinators and Administrators.
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-800">
-          {error}
-        </div>
-      )}
-
-      {successMsg && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-800">
-          {successMsg}
-        </div>
-      )}
-
       {loading ? (
-        <div className="text-center py-12 text-gray-500">Scanning schedule for competing reservations...</div>
-      ) : conflictGroups.length === 0 ? (
+        <div className="flex justify-center py-16">
+          <div className="w-8 h-8 border-3 border-utilix-yellow border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : waitlistedBookings.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
           <div className="text-4xl mb-3">⚖️</div>
-          <h3 className="text-lg font-semibold text-gray-900">No active scheduling conflicts</h3>
-          <p className="text-sm text-gray-500 mt-1">
-            All resource slots have at most one active applicant or have already been cleanly adjudicated.
-          </p>
+          <h2 className="text-lg font-bold text-gray-900 mb-1">No Active Contention</h2>
+          <p className="text-sm text-gray-500">All resource reservations are currently conflict-free.</p>
         </div>
       ) : (
-        <div className="space-y-6">
-          {conflictGroups.map((group) => (
-            <div key={group.slotKey} className="bg-white rounded-xl border border-gray-200 p-6 space-y-4 shadow-sm">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+        <div className="space-y-4">
+          {waitlistedBookings.map((b) => (
+            <div key={b.id} className="bg-white rounded-xl border border-amber-200 p-5 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <h3 className="text-base font-semibold text-gray-900">{group.resourceName}</h3>
-                  <p className="text-xs text-gray-500">
-                    Slot Time: {new Date(group.slotStart).toLocaleDateString()} at {new Date(group.slotStart).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="font-bold text-gray-900 text-base">{b.resource_id}</span>
+                    <span className="text-xs px-2.5 py-0.5 rounded-full font-medium bg-amber-100 text-amber-800">
+                      Waitlisted in Contention
+                    </span>
+                    <span className="text-xs text-gray-400 font-mono">ID: {b.id}</span>
+                  </div>
+
+                  <p className="text-xs text-gray-600 mb-2">
+                    Requester: <span className="font-semibold text-gray-900">{b.user_id}</span> · Slot:{" "}
+                    <span className="font-semibold text-gray-900">
+                      {b.slot_start.slice(0, 10)} ({b.slot_start.slice(11, 16)} – {b.slot_end.slice(11, 16)})
+                    </span>
+                  </p>
+
+                  <p className="text-xs text-amber-800 bg-amber-50 p-2.5 rounded border border-amber-200">
+                    Contention Note: {b.decision_reason || "Queued behind active slot lock."}
                   </p>
                 </div>
-                <span className="text-xs px-2.5 py-1 rounded-full bg-red-100 text-red-700 font-semibold">
-                  {group.requests.length} Competing Requests
-                </span>
-              </div>
 
-              <div className="divide-y divide-gray-50">
-                {group.requests.map((r, idx) => (
-                  <div key={r.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="space-y-0.5">
-                      <div className="text-sm font-medium text-gray-900">
-                        Candidate #{idx + 1}: {(r as any).user_name || r.user_id}
-                        <span className="ml-2 text-xs font-normal text-gray-500">({r.status})</span>
-                      </div>
-                      <p className="text-xs text-gray-500">
-                        Purpose: {r.purpose || "Academic project"}
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() => handleResolveConflict(group.slotKey, r.id)}
-                      disabled={resolvingSlot === group.slotKey}
-                      className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-sm disabled:opacity-50 shrink-0"
-                    >
-                      {resolvingSlot === group.slotKey ? "Resolving..." : "Award Slot to this Student"}
-                    </button>
-                  </div>
-                ))}
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <button
+                    onClick={() => handleOverride(b.id)}
+                    disabled={actionLoading === b.id}
+                    className="px-4 py-2 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-medium text-xs shadow-sm transition-colors disabled:opacity-50"
+                  >
+                    Execute Audited Override
+                  </button>
+                  <Link
+                    href={`/requests/${b.id}`}
+                    className="px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600 text-xs font-medium"
+                  >
+                    Details
+                  </Link>
+                </div>
               </div>
             </div>
           ))}

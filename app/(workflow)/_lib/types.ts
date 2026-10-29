@@ -110,3 +110,52 @@ export interface ValidationResult {
   valid: boolean;
   errors: ValidationError[];
 }
+
+// ─── Workflow Actions & Eligibility ──────────────────────────────────────
+
+export interface EligibilityChecks {
+  account_active: boolean;
+  training_verified: boolean;
+  training_required: string | null;
+  credit_balance: number;
+  credit_cost: number;
+  has_sufficient_credits: boolean;
+  booking_limit_passed: boolean;
+  no_overlap: boolean;
+}
+
+export interface EligibilityResult {
+  eligible: boolean;
+  reasons: string[];
+  checks: EligibilityChecks;
+  user_id: string;
+  resource_id: string;
+}
+
+export interface ApprovalActionData {
+  note?: string;
+}
+
+export interface CheckoutData {
+  bookingId: string;
+  conditionNotes?: string;
+  itemCondition?: string;
+}
+
+export interface CheckinData {
+  bookingId: string;
+  conditionNotes?: string;
+  itemCondition?: string;
+}
+
+export interface IssueReportData {
+  bookingId: string;
+  description: string;
+  severity?: "low" | "medium" | "high" | "critical";
+}
+
+export interface ConflictResolveData {
+  conflictId: string;
+  resolution: "approve_override" | "reject_override" | "split";
+  overrideReason: string;
+}

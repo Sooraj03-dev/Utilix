@@ -2,6 +2,7 @@ import { test } from "vitest";
 import assert from "node:assert/strict";
 
 process.env.USE_MOCK_DATA = "true";
+process.env.NEXT_PUBLIC_USE_MOCK_DATA = "true";
 
 import { validateBookingForm, timeToMinutes } from "./validation";
 import { MockWorkflowAdapter } from "./workflow-adapter";

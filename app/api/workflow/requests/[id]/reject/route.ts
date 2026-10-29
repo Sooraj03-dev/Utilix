@@ -1,129 +1,61 @@
-import { NextResponse } from "next/server";
-import { authErrorToResponse, requireRole, canAccessResource } from "../../../../../../lib/auth/server";
-import { getBookingById, updateBookingStatus } from "@/lib/db/bookings";
-import { getResourceById } from "@/lib/db/resources";
-import { recordApprovalDecision } from "@/lib/db/approvals";
-import { writeAudit } from "@/lib/db/audit";
-import { createNotification } from "@/lib/db/notifications";
-import { readCreditState, writeCredit } from "@/lib/db/ledger";
-import { releaseSlotLocks } from "@/lib/db/slots";
-import { adminDb } from "@/lib/firebase/admin";
-import { getWorkflowAdapter } from "@/app/(workflow)/_lib/workflow-adapter";
+/* POST /api/workflow/requests/[id]/reject — Reject booking and refund credits
+ * Owner B · app/api/workflow/requests/[id]/reject/route.ts
+ * Integrated: keeps Member A's mandatory rejection reason, routes through the
+ * shared workflow adapter (atomic slot release + credit refund + audit +
+ * notification) and records Member A's approval decision ledger entry.
+ */
+
+import { NextRequest, NextResponse } from "next/server";
+import { getWorkflowCaller, handleWorkflowError } from "@/app/(workflow)/_lib/auth";
+import { workflowAdapter } from "@/app/(workflow)/_lib/workflow-adapter";
 
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const actor = await requireRole(request, ["coordinator", "admin"]);
+    const actor = await getWorkflowCaller(request, ["coordinator", "admin"]);
     const { id } = await params;
     const body = await request.json().catch(() => ({}));
-    const reason = body?.reason?.trim();
+    const reason = typeof body?.reason === "string" ? body.reason.trim() : undefined;
 
     if (!reason) {
-      return NextResponse.json({ error: "Rejection reason is required." }, { status: 400 });
-    }
-
-    const adapter = getWorkflowAdapter();
-    if (adapter.isMock) {
-      const mockResult = await (adapter as any).rejectBooking?.(id, actor, reason);
-      if (mockResult) {
-        return NextResponse.json({ success: true, ...mockResult });
-      }
-    }
-
-    const booking = await getBookingById(id);
-    if (!booking) {
-      return NextResponse.json({ error: `Booking "${id}" not found.` }, { status: 404 });
-    }
-
-    if (actor.role === "coordinator" && !canAccessResource(actor, booking.resource_id)) {
       return NextResponse.json(
-        { error: "Forbidden: You are not assigned to manage this resource." },
-        { status: 403 },
-      );
-    }
-
-    const terminalStatuses = ["cancelled", "rejected", "returned", "no_show"];
-    if (terminalStatuses.includes(booking.status)) {
-      return NextResponse.json(
-        { error: `Cannot reject booking already in terminal status "${booking.status}".` },
+        { ok: false, success: false, error: { code: "MISSING_PARAM", message: "Rejection reason is required." } },
         { status: 400 },
       );
     }
 
-    let creditsRefunded = 0;
-    const refundKey = `refund_reject_${id}`;
+    const result = await workflowAdapter.rejectBooking(id, actor, reason);
 
-    // Execute atomic rejection, slot release, and credit refund
-    await adminDb.runTransaction(async (tx) => {
-      // 1. Release slot locks
-      if (booking.slot_ids && booking.slot_ids.length > 0) {
-        releaseSlotLocks(tx, booking.slot_ids);
-      }
-
-      // 2. Refund credits if previously charged
-      if (booking.cost_credits > 0) {
-        const creditState = await readCreditState(tx, booking.user_id, refundKey);
-        writeCredit(tx, creditState, {
-          userId: booking.user_id,
-          delta: booking.cost_credits,
-          reason: "refund_coordinator_cancel",
-          bookingId: id,
-          idempotencyKey: refundKey,
-        });
-        creditsRefunded = booking.cost_credits;
-      }
-
-      // 3. Record approval document with rejected decision
-      await recordApprovalDecision(
-        {
+    // Production-only: record approval decision ledger entry (Member A).
+    if (!workflowAdapter.isMock) {
+      try {
+        const { recordApprovalDecision } = await import("@/lib/db/approvals");
+        await recordApprovalDecision({
           bookingId: id,
           decidedBy: actor.uid,
           decision: "rejected",
           note: reason,
-        },
-        tx,
-      );
-
-      // 4. Update booking status
-      await updateBookingStatus(
-        id,
-        "rejected",
-        {
-          decision_reason: reason,
-          decision_source: "fallback",
-        },
-        tx,
-      );
-
-      // 5. Audit log
-      await writeAudit(tx, {
-        actor_id: actor.uid,
-        action: "approval_decided",
-        entity_type: "booking",
-        entity_id: id,
-        reason: `Rejected: ${reason}`,
-      });
-    });
-
-    const resource = await getResourceById(booking.resource_id);
-    await createNotification({
-      user_id: booking.user_id,
-      type: "booking_rejected",
-      title: "Booking Request Rejected",
-      body: `Your request for ${resource?.name || "equipment"} was rejected. Reason: ${reason}. ${creditsRefunded > 0 ? `${creditsRefunded} credits have been refunded to your account.` : ""}`,
-      link: `/requests/${id}`,
-      read: false,
-    });
+        });
+      } catch (ledgerError) {
+        console.warn("Approval decision record failed (booking state unchanged):", ledgerError);
+      }
+    }
 
     return NextResponse.json({
+      ok: true,
       success: true,
-      booking: { ...booking, status: "rejected", decision_reason: reason },
-      credits_refunded: creditsRefunded,
+      data: {
+        booking: result.booking,
+        credits_refunded: result.credits_refunded,
+      },
+      booking: result.booking,
+      credits_refunded: result.credits_refunded,
       reason,
+      _mock: workflowAdapter.isMock,
     });
   } catch (error) {
-    return authErrorToResponse(error);
+    return handleWorkflowError(error);
   }
 }

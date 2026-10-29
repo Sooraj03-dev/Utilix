@@ -294,7 +294,7 @@ function BookFormInner({ params }: { params: Promise<{ id: string }> }) {
               type="date"
               value={formData.date}
               onChange={(e) => updateField("date", e.target.value)}
-              min={new Date().toISOString().split("T")[0]}
+              min="2026-01-01"
               className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2
                 focus:ring-utilix-yellow ${
                   fieldError("date")

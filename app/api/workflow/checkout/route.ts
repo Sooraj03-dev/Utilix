@@ -1,104 +1,85 @@
-import { NextResponse } from "next/server";
-import { authErrorToResponse, requireRole, canAccessResource } from "../../../../lib/auth/server";
-import { getBookingById, updateBookingStatus } from "@/lib/db/bookings";
-import { recordReturn } from "@/lib/db/checkouts";
-import { updateResource } from "@/lib/db/resources";
-import { createIssue } from "@/lib/db/issues";
-import { writeAudit } from "@/lib/db/audit";
-import { releaseSlotLocks } from "@/lib/db/slots";
-import { adminDb } from "@/lib/firebase/admin";
-import { getWorkflowAdapter } from "@/app/(workflow)/_lib/workflow-adapter";
-import type { IssueCategory } from "@/lib/types";
+/* POST /api/workflow/checkout — Check out resource to student
+ * Owner B · app/api/workflow/checkout/route.ts
+ * Integrated: routes through the shared workflow adapter, and in production
+ * mode additionally records Member A's checkout ledger entry and enforces
+ * coordinator→resource assignment (canAccessResource).
+ */
 
-export async function POST(request: Request) {
+import { NextRequest, NextResponse } from "next/server";
+import { getWorkflowCaller, handleWorkflowError } from "@/app/(workflow)/_lib/auth";
+import { workflowAdapter } from "@/app/(workflow)/_lib/workflow-adapter";
+import type { CheckoutData } from "@/app/(workflow)/_lib/types";
+
+export async function POST(request: NextRequest) {
   try {
-    const actor = await requireRole(request, ["coordinator", "admin"]);
-    const body = await request.json().catch(() => ({}));
-    const { bookingId, conditionAfter, notes, hasIssue, issueCategory, issueNotes } = body;
+    const actor = await getWorkflowCaller(request, ["coordinator", "admin"]);
+    const body = (await request.json().catch(() => ({}))) as CheckoutData & {
+      notes?: string;
+    };
 
-    if (!bookingId) {
-      return NextResponse.json({ error: "bookingId is required." }, { status: 400 });
-    }
-
-    const adapter = getWorkflowAdapter();
-    if (adapter.isMock) {
-      const mockResult = await (adapter as any).checkoutBooking?.(bookingId, actor, conditionAfter, notes, hasIssue);
-      if (mockResult) {
-        return NextResponse.json({ success: true, ...mockResult });
-      }
-    }
-
-    const booking = await getBookingById(bookingId);
-    if (!booking) {
-      return NextResponse.json({ error: `Booking "${bookingId}" not found.` }, { status: 404 });
-    }
-
-    if (actor.role === "coordinator" && !canAccessResource(actor, booking.resource_id)) {
+    if (!body.bookingId) {
       return NextResponse.json(
-        { error: "Forbidden: You are not assigned to manage this resource." },
-        { status: 403 },
-      );
-    }
-
-    if (booking.status !== "checked_out") {
-      return NextResponse.json(
-        { error: `Cannot complete return for booking with status "${booking.status}". Must be "checked_out".` },
+        { ok: false, success: false, error: { code: "MISSING_PARAM", message: "bookingId is required" } },
         { status: 400 },
       );
     }
 
-    let issueReport = null;
+    // Production-only guards and ledger records (Member A integrations).
+    // In mock mode the adapter's in-memory store is authoritative.
+    if (!workflowAdapter.isMock) {
+      const [{ getBookingById }, { getUserProfileByUid }, { recordCheckin }] = await Promise.all([
+        import("@/lib/db/bookings"),
+        import("@/lib/db/users"),
+        import("@/lib/db/checkouts"),
+      ]);
 
-    await adminDb.runTransaction(async (tx) => {
-      // 1. Release slot locks
-      if (booking.slot_ids && booking.slot_ids.length > 0) {
-        releaseSlotLocks(tx, booking.slot_ids);
+      const booking = await getBookingById(body.bookingId);
+      if (!booking) {
+        return NextResponse.json(
+          { ok: false, success: false, error: { code: "NOT_FOUND", message: `Booking "${body.bookingId}" not found` } },
+          { status: 404 },
+        );
       }
 
-      // 2. Update booking to returned
-      await updateBookingStatus(bookingId, "returned", {}, tx);
+      // Coordinator→resource assignment check (Member A authorization rules).
+      if (actor.role === "coordinator") {
+        const profile = await getUserProfileByUid(actor.uid).catch(() => null);
+        const assigned = profile?.assignedResourceIds ?? [];
+        if (!assigned.includes(booking.resource_id)) {
+          return NextResponse.json(
+            {
+              ok: false,
+              success: false,
+              error: { code: "FORBIDDEN", message: "You are not assigned to manage this resource." },
+            },
+            { status: 403 },
+          );
+        }
+      }
 
-      // 3. Record return details in checkouts
-      await recordReturn(
-        bookingId,
-        {
-          conditionAfter: conditionAfter || "good",
-          notes: notes || null,
-        },
-        tx,
-      );
-
-      // 4. Audit log
-      await writeAudit(tx, {
-        actor_id: actor.uid,
-        action: "return",
-        entity_type: "booking",
-        entity_id: bookingId,
-        reason: `Resource returned. Condition: ${conditionAfter || "good"}`,
-      });
-    });
-
-    // 5. Handle issue report if equipment damaged or malfunctioned
-    if (hasIssue || conditionAfter === "damaged" || conditionAfter === "poor") {
-      const category: IssueCategory = (issueCategory as IssueCategory) || "damage";
-      issueReport = await createIssue({
-        bookingId,
-        resourceId: booking.resource_id,
-        userId: booking.user_id,
-        category,
-        notes: issueNotes || `Condition on return: ${conditionAfter || "damaged"}. ${notes || ""}`,
-      });
-
-      // Automatically place damaged resource into maintenance
-      await updateResource(booking.resource_id, { status: "maintenance" });
+      try {
+        await recordCheckin({
+          bookingId: body.bookingId,
+          checkedOutBy: actor.uid,
+          conditionBefore: body.itemCondition || "good",
+          notes: body.conditionNotes || body.notes || null,
+          photoUrl: null,
+        });
+      } catch (ledgerError) {
+        console.warn("Checkout ledger record failed (booking state unchanged):", ledgerError);
+      }
     }
 
+    const result = await workflowAdapter.checkoutBooking(body.bookingId, actor, body);
+
     return NextResponse.json({
+      ok: true,
       success: true,
-      booking: { ...booking, status: "returned" },
-      issueReport,
+      data: result.booking,
+      booking: result.booking,
+      _mock: workflowAdapter.isMock,
     });
   } catch (error) {
-    return authErrorToResponse(error);
+    return handleWorkflowError(error);
   }
 }

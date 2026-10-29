@@ -397,3 +397,273 @@ describe("Workflow — API Routes Integration", () => {
     expect(cancelJson.data.booking.status).toBe("cancelled");
   });
 });
+
+describe("Scenario S1 — Direct Contention, Fair Allocation, Waitlist & Credits", () => {
+  beforeEach(() => {
+    process.env.USE_MOCK_DATA = "true";
+  });
+
+  it("executes Scenario S1 end-to-end: two teams compete for the same slot", async () => {
+    const contestDate = "2026-11-20";
+    const startTime = "14:00";
+    const endTime = "15:30";
+    const resourceId = "res_printer1";
+
+    // Team 1 (Student Alice): Submits first request for the slot
+    const req1 = new NextRequest("http://localhost:3000/api/workflow/requests", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-mock-role": "student",
+        "x-mock-uid": "student-01",
+        "x-mock-name": "Alice Chen",
+      },
+      body: JSON.stringify({
+        resourceId,
+        date: contestDate,
+        startTime,
+        endTime,
+        purpose: "Senior Capstone prototype housing",
+        notes: "PETG material",
+      }),
+    });
+    const res1 = await createRequestRoute(req1);
+    expect(res1.status).toBe(201);
+    const json1 = await res1.json();
+    expect(json1.ok).toBe(true);
+    expect(json1.data.waitlisted).toBe(false);
+    expect(json1.data.booking.status).toBe("confirmed");
+    expect(json1.data.booking.cost_credits).toBe(2);
+    const firstBookingId = json1.data.booking.id;
+
+    // Team 2 (Student Bob): Submits competing request for the EXACT SAME exclusive slot
+    const req2 = new NextRequest("http://localhost:3000/api/workflow/requests", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-mock-role": "student",
+        "x-mock-uid": "student-02",
+        "x-mock-name": "Bob Smith",
+      },
+      body: JSON.stringify({
+        resourceId,
+        date: contestDate,
+        startTime,
+        endTime,
+        purpose: "Robotics club sensor bracket",
+        notes: "PLA material",
+      }),
+    });
+    const res2 = await createRequestRoute(req2);
+    expect(res2.status).toBe(201);
+    const json2 = await res2.json();
+    expect(json2.ok).toBe(true);
+
+    // Contention Verification:
+    // Only ONE booking holds the slot; the other is waitlisted!
+    const coordHeader = { "x-mock-role": "coordinator" };
+    const booking1After = await (await getRequestByIdRoute(
+      new NextRequest(`http://localhost:3000/api/workflow/requests/${firstBookingId}`, { headers: coordHeader }),
+      { params: Promise.resolve({ id: firstBookingId }) },
+    )).json();
+
+    const secondBookingId = json2.data.booking.id;
+    const booking2After = await (await getRequestByIdRoute(
+      new NextRequest(`http://localhost:3000/api/workflow/requests/${secondBookingId}`, { headers: coordHeader }),
+      { params: Promise.resolve({ id: secondBookingId }) },
+    )).json();
+
+    const statuses = [booking1After.data.status, booking2After.data.status];
+    expect(statuses).toContain("confirmed");
+    expect(statuses).toContain("waitlisted");
+
+    // The waitlisted request must not be charged credits (cost_credits === 0)
+    const waitlistedBooking = booking1After.data.status === "waitlisted" ? booking1After.data : booking2After.data;
+    const confirmedBooking = booking1After.data.status === "confirmed" ? booking1After.data : booking2After.data;
+
+    expect(waitlistedBooking.cost_credits).toBe(0);
+    expect(confirmedBooking.cost_credits).toBe(2);
+
+    // Both requests must carry plain-language explanations
+    expect(waitlistedBooking.decision_reason).toBeDefined();
+    expect(waitlistedBooking.decision_reason.length).toBeGreaterThan(10);
+    expect(confirmedBooking.decision_reason).toBeDefined();
+
+    // Verify Decision Source labeling is deterministic fallback
+    expect(["fallback", "ai"]).toContain(waitlistedBooking.decision_source);
+
+    // ─── Phase 3 Verification: Cancellation & Automatic Waitlist Promotion ───
+    // When the winner cancels, the slot must free up and automatically promote the waitlisted request!
+    const cancelWinnerReq = new NextRequest(
+      `http://localhost:3000/api/workflow/requests/${confirmedBooking.id}/cancel`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-mock-role": "student",
+          "x-mock-uid": confirmedBooking.user_id,
+        },
+        body: JSON.stringify({ reason: "Finished project early" }),
+      },
+    );
+    const cancelRes = await cancelRequestRoute(cancelWinnerReq, {
+      params: Promise.resolve({ id: confirmedBooking.id }),
+    });
+    expect(cancelRes.status).toBe(200);
+    const cancelJson = await cancelRes.json();
+    expect(cancelJson.data.booking.status).toBe("cancelled");
+    expect(cancelJson.data.credits_refunded).toBe(2);
+
+    // Now inspect the previously waitlisted booking: it must be automatically promoted to confirmed!
+    const promotedCheck = await (await getRequestByIdRoute(
+      new NextRequest(`http://localhost:3000/api/workflow/requests/${waitlistedBooking.id}`, { headers: coordHeader }),
+      { params: Promise.resolve({ id: waitlistedBooking.id }) },
+    )).json();
+
+    expect(promotedCheck.data.status).toBe("confirmed");
+    expect(promotedCheck.data.cost_credits).toBe(2);
+    expect(promotedCheck.data.decision_reason).toContain("Promoted from waitlist");
+  });
+});
+
+describe("Workflow — Eligibility Checks & Policy Constraints", () => {
+  beforeEach(() => {
+    process.env.USE_MOCK_DATA = "true";
+  });
+
+  it("checks student eligibility via /api/workflow/eligibility route", async () => {
+    const { GET: getEligibilityRoute } = await import("@/app/api/workflow/eligibility/route");
+    const req = new NextRequest("http://localhost:3000/api/workflow/eligibility?resourceId=res_printer1");
+    const res = await getEligibilityRoute(req);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.eligible).toBe(true);
+    expect(json.checks.account_active).toBe(true);
+    expect(json.checks.has_sufficient_credits).toBe(true);
+  });
+});
+
+describe("Workflow — Coordinator Lifecycle & Security Invariants", () => {
+  beforeEach(() => {
+    process.env.USE_MOCK_DATA = "true";
+  });
+
+  it("completes full coordinator lifecycle: approve -> checkout -> checkin", async () => {
+    const { POST: approveRoute } = await import("@/app/api/workflow/requests/[id]/approve/route");
+    const { POST: checkoutRoute } = await import("@/app/api/workflow/checkout/route");
+    const { POST: checkinRoute } = await import("@/app/api/workflow/checkin/route");
+
+    // 1. Create a booking that requires approval (restricted studio/lab resource)
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 3);
+    const dateStr = tomorrow.toISOString().split("T")[0];
+
+    const createReq = new NextRequest("http://localhost:3000/api/workflow/requests", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-mock-role": "student",
+        "x-mock-uid": "student-01",
+      },
+      body: JSON.stringify({
+        resourceId: "res_studio_a",
+        date: dateStr,
+        startTime: "13:00",
+        endTime: "14:00",
+        purpose: "Senior film sound editing",
+        notes: "Restricted studio session",
+      }),
+    });
+    const createRes = await createRequestRoute(createReq);
+    expect(createRes.status).toBe(201);
+    const createJson = await createRes.json();
+    const bookingId = createJson.data.booking.id;
+    expect(createJson.data.booking.status).toBe("pending_approval");
+
+    // 2. Unauthorized student cannot approve!
+    const unauthApprove = new NextRequest(`http://localhost:3000/api/workflow/requests/${bookingId}/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-mock-role": "student" },
+      body: JSON.stringify({ note: "Self-approval attempt" }),
+    });
+    const unauthRes = await approveRoute(unauthApprove, { params: Promise.resolve({ id: bookingId }) });
+    expect(unauthRes.status).toBe(403);
+
+    // 3. Coordinator approves booking
+    const coordApprove = new NextRequest(`http://localhost:3000/api/workflow/requests/${bookingId}/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-mock-role": "coordinator" },
+      body: JSON.stringify({ note: "Schedule verified by lab manager" }),
+    });
+    const coordRes = await approveRoute(coordApprove, { params: Promise.resolve({ id: bookingId }) });
+    expect(coordRes.status).toBe(200);
+    const coordJson = await coordRes.json();
+    expect(coordJson.data.status).toBe("confirmed");
+
+    // 4. Coordinator checks out equipment/studio
+    const checkoutReq = new NextRequest("http://localhost:3000/api/workflow/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-mock-role": "coordinator" },
+      body: JSON.stringify({
+        bookingId,
+        itemCondition: "pristine",
+        conditionNotes: "Console calibrated and keys handed over",
+      }),
+    });
+    const checkoutRes = await checkoutRoute(checkoutReq);
+    expect(checkoutRes.status).toBe(200);
+    const checkoutJson = await checkoutRes.json();
+    expect(checkoutJson.data.status).toBe("checked_out");
+
+    // 5. Illegal transition: cannot cancel a checked-out booking!
+    const illegalCancelReq = new NextRequest(`http://localhost:3000/api/workflow/requests/${bookingId}/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-mock-role": "student", "x-mock-uid": "student-01" },
+    });
+    const illegalCancelRes = await cancelRequestRoute(illegalCancelReq, { params: Promise.resolve({ id: bookingId }) });
+    expect(illegalCancelRes.status).toBe(400);
+
+    // 6. Coordinator checks in returned equipment
+    const checkinReq = new NextRequest("http://localhost:3000/api/workflow/checkin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-mock-role": "coordinator" },
+      body: JSON.stringify({
+        bookingId,
+        itemCondition: "good",
+        conditionNotes: "Returned on time, no damages",
+      }),
+    });
+    const checkinRes = await checkinRoute(checkinReq);
+    expect(checkinRes.status).toBe(200);
+    const checkinJson = await checkinRes.json();
+    expect(checkinJson.data.status).toBe("returned");
+  });
+
+  it("handles conflict resolution with mandatory override reason", async () => {
+    const { POST: conflictRoute } = await import("@/app/api/workflow/conflicts/[id]/resolve/route");
+
+    // Missing reason must be rejected with 400
+    const badReq = new NextRequest("http://localhost:3000/api/workflow/conflicts/conf_01/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-mock-role": "coordinator" },
+      body: JSON.stringify({ resolution: "approve_override", overrideReason: "" }),
+    });
+    const badRes = await conflictRoute(badReq, { params: Promise.resolve({ id: "conf_01" }) });
+    expect(badRes.status).toBe(400);
+
+    // Valid override with reason succeeds
+    const goodReq = new NextRequest("http://localhost:3000/api/workflow/conflicts/conf_01/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-mock-role": "coordinator" },
+      body: JSON.stringify({
+        resolution: "approve_override",
+        overrideReason: "Department Dean approved capstone priority override",
+      }),
+    });
+    const goodRes = await conflictRoute(goodReq, { params: Promise.resolve({ id: "conf_01" }) });
+    expect(goodRes.status).toBe(200);
+    const goodJson = await goodRes.json();
+    expect(goodJson.ok).toBe(true);
+  });
+});

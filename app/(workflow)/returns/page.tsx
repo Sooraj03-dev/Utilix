@@ -1,255 +1,234 @@
 /* ═══════════════════════════════════════════════════════════════════════════
- * Returns & Check-in Page — Facility Handover and Equipment Return
- * app/(workflow)/returns/page.tsx
+ * Returns & Equipment Handoff Page — Coordinator Returns Desk
+ * Owner B · app/(workflow)/returns/page.tsx
  * ═══════════════════════════════════════════════════════════════════════════ */
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import type { Booking } from "../_lib/types";
-import { useAuth } from "@/lib/auth/context";
+
+interface HandoffBooking extends Booking {
+  isOverdue?: boolean;
+}
+
+function checkIsOverdue(slotEnd: string): boolean {
+  return new Date(slotEnd).getTime() < Date.now();
+}
 
 export default function ReturnsPage() {
-  const { user } = useAuth();
-  const [activeBookings, setActiveBookings] = useState<Booking[]>([]);
+  const [bookings, setBookings] = useState<HandoffBooking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // Return modal state
-  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
-  const [returnCondition, setReturnCondition] = useState<"good" | "fair" | "damaged" | "dirty">("good");
-  const [returnNotes, setReturnNotes] = useState("");
-
-  const fetchActiveBookings = async () => {
+  async function refreshBookings() {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/workflow/requests");
       const json = await res.json();
-      if (!json.success && !json.data) {
-        throw new Error(json.error?.message || json.error || "Failed to load bookings");
-      }
-      const all: Booking[] = json.data || [];
-      // Filter for bookings that can be checked in (confirmed) or returned (checked_out)
-      const relevant = all.filter((r) => r.status === "confirmed" || r.status === "checked_out");
-      setActiveBookings(relevant);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load active bookings");
+      if (!json.success) throw new Error(json.error?.message || "Failed to load bookings");
+      const all: Booking[] = json.data ?? [];
+      const handoff: HandoffBooking[] = all
+        .filter((b) => ["confirmed", "checked_out"].includes(b.status))
+        .map((b) => ({
+          ...b,
+          isOverdue: b.status === "checked_out" && checkIsOverdue(b.slot_end),
+        }));
+      setBookings(handoff);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load bookings");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   useEffect(() => {
-    fetchActiveBookings();
+    async function load() {
+      try {
+        const res = await fetch("/api/workflow/requests");
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error?.message || "Failed to load bookings");
+        const all: Booking[] = json.data ?? [];
+        const handoff: HandoffBooking[] = all
+          .filter((b) => ["confirmed", "checked_out"].includes(b.status))
+          .map((b) => ({
+            ...b,
+            isOverdue: b.status === "checked_out" && checkIsOverdue(b.slot_end),
+          }));
+        setBookings(handoff);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load bookings");
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
   }, []);
 
-  const handleCheckin = async (bookingId: string) => {
-    setActionLoading(bookingId);
-    setError(null);
-    setSuccessMsg(null);
-    try {
-      const res = await fetch("/api/workflow/checkin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ booking_id: bookingId, notes: "Equipment collected by student" }),
-      });
-      const json = await res.json();
-      if (!res.ok || json.error) {
-        throw new Error(json.error || "Failed to complete check-in.");
-      }
-      setSuccessMsg(`Equipment for booking ${bookingId} successfully checked out!`);
-      await fetchActiveBookings();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error during check-in");
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  async function handleCheckout(bookingId: string) {
+    const condition = prompt("Item condition at checkout (e.g., pristine, normal, minor scuffs):", "pristine");
+    if (!condition) return;
+    const notes = prompt("Inspection notes (optional):", "Power cable and lenses verified.");
 
-  const handleCompleteReturn = async () => {
-    if (!selectedBooking) return;
-    setActionLoading(selectedBooking.id);
-    setError(null);
-    setSuccessMsg(null);
+    setActionLoading(bookingId);
     try {
       const res = await fetch("/api/workflow/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          booking_id: selectedBooking.id,
-          condition: returnCondition,
-          notes: returnNotes || `Returned in ${returnCondition} condition.`,
+          bookingId,
+          itemCondition: condition,
+          conditionNotes: notes || undefined,
         }),
       });
       const json = await res.json();
-      if (!res.ok || json.error) {
-        throw new Error(json.error || "Failed to record return.");
-      }
-      setSuccessMsg(`Booking ${selectedBooking.id} marked as returned! ${json.issue_id ? `(Incident report ${json.issue_id} filed)` : ""}`);
-      setSelectedBooking(null);
-      setReturnNotes("");
-      await fetchActiveBookings();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error recording return");
+      if (!json.success) throw new Error(json.error?.message || "Checkout failed");
+      await refreshBookings();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Checkout failed");
     } finally {
       setActionLoading(null);
     }
-  };
+  }
+
+  async function handleCheckin(bookingId: string) {
+    const condition = prompt("Item condition upon return (e.g., pristine, good, damaged):", "good");
+    if (!condition) return;
+    const notes = prompt("Return inspection notes (optional):", "All accessories returned in working order.");
+
+    setActionLoading(bookingId);
+    try {
+      const res = await fetch("/api/workflow/checkin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookingId,
+          itemCondition: condition,
+          conditionNotes: notes || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message || "Checkin failed");
+      await refreshBookings();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Checkin failed");
+    } finally {
+      setActionLoading(null);
+    }
+  }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="max-w-4xl mx-auto py-4">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Equipment Check-in &amp; Returns</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Dispatch reserved items and inspect returned equipment for damages.
+          <h1 className="text-2xl font-bold text-gray-900">Equipment Handoff & Returns Desk</h1>
+          <p className="text-sm text-gray-500">
+            Check out equipment to verified students, inspect return condition, and flag overdue items.
           </p>
         </div>
         <button
-          onClick={fetchActiveBookings}
+          onClick={refreshBookings}
           disabled={loading}
-          className="px-3 py-1.5 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+          className="text-sm px-3.5 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium"
         >
-          {loading ? "Refreshing..." : "Refresh"}
+          {loading ? "Refreshing…" : "Refresh"}
         </button>
       </div>
 
-      {user && user.role === "student" && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
-          ⚠️ <strong>Student View Notice:</strong> Handover collection and return inspection are performed by staff coordinators at the equipment desk.
-        </div>
-      )}
-
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-800">
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm mb-6">
           {error}
         </div>
       )}
 
-      {successMsg && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-800">
-          {successMsg}
-        </div>
-      )}
-
       {loading ? (
-        <div className="text-center py-12 text-gray-500">Loading active equipment sessions...</div>
-      ) : activeBookings.length === 0 ? (
+        <div className="flex justify-center py-16">
+          <div className="w-8 h-8 border-3 border-utilix-yellow border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : bookings.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
           <div className="text-4xl mb-3">📦</div>
-          <h3 className="text-lg font-semibold text-gray-900">No active equipment out</h3>
-          <p className="text-sm text-gray-500 mt-1">
-            All confirmed reservations are checked in and equipment returned.
-          </p>
+          <h2 className="text-lg font-bold text-gray-900 mb-1">No Active Handoffs</h2>
+          <p className="text-sm text-gray-500">There are no bookings currently confirmed or checked out.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100 overflow-hidden shadow-sm">
-          {activeBookings.map((b) => (
-            <div key={b.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-gray-50 transition">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-900">{(b as any).resource_name || b.resource_id}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    b.status === "confirmed" ? "bg-green-100 text-green-800" : "bg-purple-100 text-purple-800"
-                  }`}>
-                    {b.status === "confirmed" ? "Ready for Pickup" : "In Use (Checked Out)"}
-                  </span>
-                  <span className="text-xs text-gray-400">ID: {b.id}</span>
+        <div className="space-y-4">
+          {bookings.map((b) => {
+            const isOverdue = b.isOverdue ?? false;
+
+            return (
+              <div
+                key={b.id}
+                className={`bg-white rounded-xl border p-5 shadow-sm transition-all ${
+                  isOverdue ? "border-red-300 bg-red-50/20" : "border-gray-200"
+                }`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="font-bold text-gray-900 text-base">{b.resource_id}</span>
+                      <span
+                        className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
+                          b.status === "checked_out"
+                            ? isOverdue
+                              ? "bg-red-100 text-red-800 font-bold"
+                              : "bg-purple-100 text-purple-800"
+                            : "bg-green-100 text-green-800"
+                        }`}
+                      >
+                        {isOverdue ? "⚠️ OVERDUE" : b.status === "checked_out" ? "Checked Out" : "Confirmed"}
+                      </span>
+                      <span className="text-xs text-gray-400 font-mono">ID: {b.id}</span>
+                    </div>
+
+                    <p className="text-xs text-gray-600 mb-2">
+                      Borrower: <span className="font-semibold text-gray-900">{b.user_id}</span> · Slot Window:{" "}
+                      <span className="font-semibold text-gray-900">
+                        {b.slot_start.slice(0, 10)} ({b.slot_start.slice(11, 16)} – {b.slot_end.slice(11, 16)})
+                      </span>
+                    </p>
+
+                    {b.decision_reason && (
+                      <p className="text-xs text-gray-600 bg-gray-50 p-2 rounded border border-gray-100">
+                        Condition/Log: {b.decision_reason}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    {b.status === "confirmed" && (
+                      <button
+                        onClick={() => handleCheckout(b.id)}
+                        disabled={actionLoading === b.id}
+                        className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs shadow-sm transition-colors disabled:opacity-50"
+                      >
+                        Check Out Item
+                      </button>
+                    )}
+
+                    {b.status === "checked_out" && (
+                      <button
+                        onClick={() => handleCheckin(b.id)}
+                        disabled={actionLoading === b.id}
+                        className="px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-medium text-xs shadow-sm transition-colors disabled:opacity-50"
+                      >
+                        Check In & Inspect
+                      </button>
+                    )}
+
+                    <Link
+                      href={`/requests/${b.id}`}
+                      className="px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600 text-xs font-medium"
+                    >
+                      Details
+                    </Link>
+                  </div>
                 </div>
-                <div className="text-sm text-gray-600">
-                  <span className="font-medium">Requester:</span> {(b as any).user_name || b.user_id} &bull;{" "}
-                  <span className="font-medium">Slot:</span> {new Date(b.slot_start).toLocaleDateString()} {new Date(b.slot_start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </div>
               </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                {b.status === "confirmed" ? (
-                  <button
-                    onClick={() => handleCheckin(b.id)}
-                    disabled={actionLoading === b.id}
-                    className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-sm disabled:opacity-50"
-                  >
-                    {actionLoading === b.id ? "Processing..." : "Handover / Check In"}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setSelectedBooking(b)}
-                    disabled={actionLoading === b.id}
-                    className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition shadow-sm disabled:opacity-50"
-                  >
-                    Complete Return
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Return Inspection Modal */}
-      {selectedBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
-            <h3 className="text-lg font-bold text-gray-900">
-              Inspect &amp; Return Equipment
-            </h3>
-            <p className="text-sm text-gray-600">
-              Booking: <span className="font-semibold">{(selectedBooking as any).resource_name || selectedBooking.resource_id}</span> ({selectedBooking.id})
-            </p>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
-                Return Condition
-              </label>
-              <select
-                value={returnCondition}
-                onChange={(e) => setReturnCondition(e.target.value as any)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
-              >
-                <option value="good">Good (No damage)</option>
-                <option value="fair">Fair (Normal minor wear)</option>
-                <option value="damaged">Damaged (Requires repair / replacement)</option>
-                <option value="dirty">Dirty (Needs cleaning)</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
-                Inspection Notes
-              </label>
-              <textarea
-                value={returnNotes}
-                onChange={(e) => setReturnNotes(e.target.value)}
-                placeholder="Note any scratches, missing cables, or condition remarks..."
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-
-            {returnCondition === "damaged" && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
-                Notice: Marking as Damaged will automatically generate a high-priority maintenance issue report in Firestore.
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setSelectedBooking(null)}
-                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCompleteReturn}
-                disabled={actionLoading === selectedBooking.id}
-                className="px-4 py-2 text-sm font-semibold rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition disabled:opacity-50"
-              >
-                {actionLoading === selectedBooking.id ? "Saving..." : "Confirm Return"}
-              </button>
-            </div>
-          </div>
+            );
+          })}
         </div>
       )}
     </div>

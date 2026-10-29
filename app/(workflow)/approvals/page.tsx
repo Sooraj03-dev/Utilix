@@ -1,168 +1,169 @@
 /* ═══════════════════════════════════════════════════════════════════════════
- * Approvals Page — Coordinator/Admin Review Queue
- * app/(workflow)/approvals/page.tsx
+ * Approvals Page — Coordinator approval queue
+ * Owner B · app/(workflow)/approvals/page.tsx
  * ═══════════════════════════════════════════════════════════════════════════ */
 "use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Booking } from "../_lib/types";
-import { useAuth } from "@/lib/auth/context";
 
 export default function ApprovalsPage() {
-  const { user } = useAuth();
   const [requests, setRequests] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const fetchPendingRequests = async () => {
+  async function fetchPendingRequests() {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/workflow/requests");
       const json = await res.json();
-      if (!json.success && !json.data) {
-        throw new Error(json.error?.message || json.error || "Failed to load requests");
-      }
-      const all: Booking[] = json.data || [];
-      // Filter for items requiring approval or allocated/submitted
-      const pending = all.filter((r) =>
-        r.status === "pending_approval" || r.status === "allocated" || r.status === "submitted"
-      );
+      if (!json.success) throw new Error(json.error?.message || "Failed to load requests");
+      const all: Booking[] = json.data ?? [];
+      const pending = all.filter((b) => ["pending_approval", "submitted", "allocated"].includes(b.status));
       setRequests(pending);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load requests");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load requests");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   useEffect(() => {
-    fetchPendingRequests();
+    Promise.resolve().then(() => fetchPendingRequests());
   }, []);
 
-  const handleDecision = async (id: string, action: "approve" | "reject") => {
-    setActionLoading(id);
-    setError(null);
-    setSuccessMsg(null);
+  async function handleApprove(bookingId: string) {
+    const note = prompt("Approval note (optional):", "Approved after schedule check");
+    if (note === null) return;
+
+    setActionLoading(bookingId);
     try {
-      const endpoint = `/api/workflow/requests/${id}/${action}`;
-      const res = await fetch(endpoint, {
+      const res = await fetch(`/api/workflow/requests/${bookingId}/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          notes: action === "approve" ? "Approved by facility coordinator" : undefined,
-          reason: action === "reject" ? "Slot or resource unavailable for requested purpose" : undefined,
-        }),
+        body: JSON.stringify({ note }),
       });
-
       const json = await res.json();
-      if (!res.ok || json.error) {
-        throw new Error(json.error || `Failed to ${action} booking.`);
-      }
-
-      setSuccessMsg(`Booking ${id} successfully ${action}d!`);
-      // Refresh list
-      await fetchPendingRequests();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : `Error during ${action}`);
+      if (!json.success) throw new Error(json.error?.message || "Failed to approve");
+      setRequests((prev) => prev.filter((r) => r.id !== bookingId));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Approval failed");
     } finally {
       setActionLoading(null);
     }
-  };
+  }
+
+  async function handleReject(bookingId: string) {
+    const reason = prompt("Reason for rejection:", "Capacity conflict or maintenance requirement");
+    if (!reason) return;
+
+    setActionLoading(bookingId);
+    try {
+      const res = await fetch(`/api/workflow/requests/${bookingId}/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message || "Failed to reject");
+      setRequests((prev) => prev.filter((r) => r.id !== bookingId));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Rejection failed");
+    } finally {
+      setActionLoading(null);
+    }
+  }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="max-w-4xl mx-auto py-4">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Coordinator Approval Queue</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Review, approve, or reject pending equipment and space reservations.
+          <h1 className="text-2xl font-bold text-gray-900">Coordinator Approvals Queue</h1>
+          <p className="text-sm text-gray-500">
+            Review and decide on restricted equipment bookings and allocation requests.
           </p>
         </div>
         <button
           onClick={fetchPendingRequests}
           disabled={loading}
-          className="px-3 py-1.5 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+          className="text-sm px-3.5 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium"
         >
-          {loading ? "Refreshing..." : "Refresh Queue"}
+          {loading ? "Refreshing…" : "Refresh"}
         </button>
       </div>
 
-      {user && user.role === "student" && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
-          ⚠️ <strong>Student View Notice:</strong> You are signed in with a Student account. Official approval and rejection actions require a Coordinator or Administrator role.
-        </div>
-      )}
-
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-800">
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm mb-6">
           {error}
         </div>
       )}
 
-      {successMsg && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-800">
-          {successMsg}
-        </div>
-      )}
-
       {loading ? (
-        <div className="text-center py-12 text-gray-500">Loading pending requests...</div>
+        <div className="flex justify-center py-16">
+          <div className="w-8 h-8 border-3 border-utilix-yellow border-t-transparent rounded-full animate-spin" />
+        </div>
       ) : requests.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
           <div className="text-4xl mb-3">🎉</div>
-          <h3 className="text-lg font-semibold text-gray-900">All clear!</h3>
-          <p className="text-sm text-gray-500 mt-1">
-            No reservations currently require coordinator approval.
-          </p>
-          <div className="mt-4">
-            <Link
-              href="/requests"
-              className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
-            >
-              View all requests &rarr;
-            </Link>
-          </div>
+          <h2 className="text-lg font-bold text-gray-900 mb-1">Queue is clear!</h2>
+          <p className="text-sm text-gray-500">No pending booking requests require coordinator approval right now.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100 overflow-hidden shadow-sm">
+        <div className="space-y-4">
           {requests.map((req) => (
-            <div key={req.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-gray-50 transition">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-900">{(req as any).resource_name || req.resource_id}</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 font-medium">
-                    {req.status}
-                  </span>
-                  <span className="text-xs text-gray-400">ID: {req.id}</span>
+            <div key={req.id} className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="font-bold text-gray-900 text-base">{req.resource_id}</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-800">
+                      {req.status}
+                    </span>
+                    <span className="text-xs text-gray-400 font-mono">ID: {req.id}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Student: <span className="font-semibold text-gray-700">{req.user_id}</span> · Slot:{" "}
+                    <span className="font-semibold text-gray-700">
+                      {req.slot_start.slice(0, 10)} ({req.slot_start.slice(11, 16)} - {req.slot_end.slice(11, 16)})
+                    </span>{" "}
+                    · Credits: {req.cost_credits}
+                  </p>
+                  <p className="text-sm text-gray-700 bg-gray-50 p-2.5 rounded-lg border border-gray-100 mb-2">
+                    <span className="font-medium text-gray-900">Declared Purpose: </span>
+                    {req.purpose}
+                  </p>
+                  {req.decision_reason && (
+                    <p className="text-xs text-blue-700 bg-blue-50/60 p-2 rounded border border-blue-100">
+                      Recommendation: {req.decision_reason}
+                    </p>
+                  )}
                 </div>
-                <div className="text-sm text-gray-600">
-                  <span className="font-medium">User:</span> {(req as any).user_name || req.user_id} &bull;{" "}
-                  <span className="font-medium">Slot:</span> {new Date(req.slot_start).toLocaleDateString()} ({new Date(req.slot_start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - {new Date(req.slot_end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})
-                </div>
-                {req.purpose && (
-                  <p className="text-xs text-gray-500 italic">Purpose: "{req.purpose}"</p>
-                )}
-              </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => handleDecision(req.id, "approve")}
-                  disabled={actionLoading === req.id}
-                  className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-sm disabled:opacity-50"
-                >
-                  {actionLoading === req.id ? "Processing..." : "Approve"}
-                </button>
-                <button
-                  onClick={() => handleDecision(req.id, "reject")}
-                  disabled={actionLoading === req.id}
-                  className="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition disabled:opacity-50"
-                >
-                  Reject
-                </button>
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <button
+                    onClick={() => handleApprove(req.id)}
+                    disabled={actionLoading === req.id}
+                    className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white font-medium text-xs shadow-sm transition-colors disabled:opacity-50"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => handleReject(req.id)}
+                    disabled={actionLoading === req.id}
+                    className="px-4 py-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-medium text-xs transition-colors disabled:opacity-50"
+                  >
+                    Reject
+                  </button>
+                  <Link
+                    href={`/requests/${req.id}`}
+                    className="px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600 text-xs font-medium"
+                  >
+                    Details
+                  </Link>
+                </div>
               </div>
             </div>
           ))}

@@ -9,6 +9,7 @@ import { useEffect, useState, use, Suspense } from "react";
 import Link from "next/link";
 import type { Booking, BookingStatus } from "../../_lib/types";
 import { canTransition } from "@/lib/types/status";
+import { DecisionExplanation } from "../../_components/DecisionExplanation";
 
 const STATUS_STYLES: Record<
   BookingStatus,
@@ -182,8 +183,11 @@ function RequestDetailContent({ params }: { params: Promise<{ id: string }> }) {
         )}
       </div>
 
+      {/* Decision Transparency & AI/Fallback Explanation */}
+      <DecisionExplanation booking={request} />
+
       {/* Actions */}
-      <div className="flex gap-3">
+      <div className="flex gap-3 mt-6">
         {isCancellable && (
           <button
             onClick={handleCancel}
