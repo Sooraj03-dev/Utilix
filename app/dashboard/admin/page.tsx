@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   TrendingDown,
   Info,
+  Download,
 } from "lucide-react";
 import { loadAdminKpis } from "@/lib/db/kpis";
 import { EmptyState } from "@/components/EmptyState";
@@ -388,7 +389,7 @@ export default async function AdminDashboardPage() {
         <h2 className="text-lg font-black text-[#111111] tracking-tight mb-4">
           Administrative Controls & Policy Modules
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Link
             href="/dashboard/admin/policy"
             className="p-5 rounded-2xl border-[3px] border-[#111111] bg-white hover:bg-[#FFF9E6] shadow-[4px_4px_0px_0px_#111111] flex flex-col justify-between transition-all group min-h-[140px]"
@@ -451,6 +452,27 @@ export default async function AdminDashboardPage() {
               Inspect Audit Log <ArrowRight className="w-3.5 h-3.5 ml-1" />
             </div>
           </Link>
+          <a
+            href="/dashboard/admin/export"
+            download
+            className="p-5 rounded-2xl border-[3px] border-[#111111] bg-white hover:bg-[#FFF9E6] shadow-[4px_4px_0px_0px_#111111] flex flex-col justify-between transition-all group min-h-[140px]"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-black uppercase text-[#4A4A4A]">Data Export</span>
+                <Download className="w-5 h-5 text-[#111111]" />
+              </div>
+              <h3 className="font-black text-base text-[#111111] group-hover:underline">
+                Export Utilisation CSV
+              </h3>
+              <p className="text-xs text-[#4A4A4A] font-medium mt-1">
+                Stream a complete CSV report of campus equipment utilization rates.
+              </p>
+            </div>
+            <div className="mt-4 flex items-center text-xs font-black text-[#111111]">
+              Download CSV Report <Download className="w-3.5 h-3.5 ml-1" />
+            </div>
+          </a>
         </div>
       </section>
     </div>
