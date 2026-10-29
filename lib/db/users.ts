@@ -6,7 +6,17 @@ import "server-only";
 import { usersCol } from "./collections";
 import { docToEntity, nowISO, nowTimestamp } from "./converters";
 import type { User, UserRole } from "@/lib/types";
+import type { UserProfile } from "@/lib/types/auth";
 import type { Transaction } from "firebase-admin/firestore";
+import { getFirebaseAdminDb } from "../firebase/admin";
+import { findMockAccountByUid } from "../auth/mock";
+import { isMockAuthEnabled } from "../auth/config";
+
+const VALID_ROLES: UserRole[] = ["student", "coordinator", "admin"];
+
+function normalizeRole(rawRole: unknown): UserRole {
+  return VALID_ROLES.includes(rawRole as UserRole) ? (rawRole as UserRole) : "student";
+}
 
 /** Get a single user by ID, or null. */
 export async function getUserById(id: string): Promise<User | null> {
@@ -103,4 +113,46 @@ export async function updateUser(
   } else {
     await ref.update(partial);
   }
+}
+
+/** Get a user profile by UID for authentication and session verification. */
+export async function getUserProfileByUid(uid: string): Promise<UserProfile | null> {
+  if (isMockAuthEnabled()) {
+    const mock = findMockAccountByUid(uid);
+    if (mock) {
+      return {
+        uid: mock.uid,
+        email: mock.email,
+        displayName: mock.displayName,
+        role: mock.role,
+        assignedResourceIds: mock.assignedResourceIds,
+        trainingVerified: mock.trainingVerified,
+      };
+    }
+  }
+
+  const db = getFirebaseAdminDb();
+  if (!db) {
+    return null;
+  }
+
+  const snapshot = await db.collection("users").doc(uid).get();
+  if (!snapshot.exists) {
+    return null;
+  }
+
+  const data = snapshot.data() ?? {};
+
+  return {
+    uid,
+    email: typeof data.email === "string" ? data.email : "",
+    displayName: typeof data.displayName === "string" ? data.displayName : (typeof data.name === "string" ? data.name : "Unknown user"),
+    role: normalizeRole(data.role),
+    assignedResourceIds: Array.isArray(data.assignedResourceIds)
+      ? data.assignedResourceIds.filter((value): value is string => typeof value === "string")
+      : [],
+    trainingVerified: data.trainingVerified === true,
+    createdAt: typeof data.createdAt === "string" ? data.createdAt : undefined,
+    updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : undefined,
+  };
 }

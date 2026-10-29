@@ -5,12 +5,17 @@ import {
   initializeApp,
   getApps,
   cert,
+  type App as AdminApp,
   type ServiceAccount,
 } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
+import { getAuth, type Auth as AdminAuth } from "firebase-admin/auth";
+import { getFirestore, type Firestore as AdminFirestore } from "firebase-admin/firestore";
 
-function initAdmin() {
+let adminAppSingleton: AdminApp | null = null;
+let adminAuthSingleton: AdminAuth | null = null;
+let adminDbSingleton: AdminFirestore | null = null;
+
+function initAdmin(): AdminApp {
   if (getApps().length) {
     return getApps()[0];
   }
@@ -28,14 +33,33 @@ function initAdmin() {
   if (projectId && clientEmail && privateKey) {
     return initializeApp({
       credential: cert({ projectId, clientEmail, privateKey } as ServiceAccount),
+      projectId,
     });
   }
 
-  return initializeApp({ projectId });
+  return initializeApp({ projectId: projectId || "utilix-dev" });
 }
 
-const app = initAdmin();
+const app: AdminApp = initAdmin();
+adminAppSingleton = app;
 
-export const adminAuth = getAuth(app);
-export const adminDb = getFirestore(app);
+export const adminAuth: AdminAuth = getAuth(app);
+adminAuthSingleton = adminAuth;
+
+export const adminDb: AdminFirestore = getFirestore(app);
+adminDbSingleton = adminDb;
+
 export { app as adminApp };
+
+// Accessors for auth-roles compatibility
+export function getFirebaseAdminApp(): AdminApp | null {
+  return adminAppSingleton ?? app;
+}
+
+export function getFirebaseAdminAuth(): AdminAuth | null {
+  return adminAuthSingleton ?? adminAuth;
+}
+
+export function getFirebaseAdminDb(): AdminFirestore | null {
+  return adminDbSingleton ?? adminDb;
+}

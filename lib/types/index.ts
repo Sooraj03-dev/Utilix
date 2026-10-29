@@ -98,6 +98,9 @@ export type {
   AIInsightsResponse,
 } from "./ai";
 
+// Auth types from fs-a/auth-roles
+export * from "./auth";
+
 // ─── Firestore collection names (single source of truth) ───
 export const COLLECTIONS = {
   users: "users",
