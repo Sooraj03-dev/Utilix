@@ -24,7 +24,6 @@ import { useRole } from "./RoleContext";
 import { CreditPill } from "./CreditPill";
 import { Avatar } from "./Avatar";
 import { UtilixLogo } from "./UtilixLogo";
-import { UtilixIntro } from "./UtilixIntro";
 import { Role } from "./types";
 
 export function Navbar() {
@@ -41,28 +40,34 @@ export function Navbar() {
     switch (role) {
       case "coordinator":
         return [
-          { label: "Resource Hub", href: "/#resources", icon: Layers },
-          { label: "Review Queue", href: "/#queue", icon: Clock },
+          { label: "Resource Hub", href: "/dashboard/coordinator#resources", icon: Layers },
+          { label: "Review Queue", href: "/dashboard/coordinator#queue", icon: Clock },
           { label: "Fair Rules", href: "/rules", icon: BookOpen },
         ];
       case "admin":
         return [
-          { label: "All Resources", href: "/#resources", icon: Layers },
-          { label: "Fair Quotas", href: "/#quotas", icon: ShieldCheck },
-          { label: "System Audit", href: "/#audit", icon: Settings },
+          { label: "All Resources", href: "/dashboard/admin#resources", icon: Layers },
+          { label: "Fair Quotas", href: "/dashboard/admin#quotas", icon: ShieldCheck },
+          { label: "System Audit", href: "/dashboard/admin#audit", icon: Settings },
           { label: "Fair Rules", href: "/rules", icon: BookOpen },
         ];
       case "student":
       default:
         return [
-          { label: "Resources", href: "/#resources", icon: Layers },
-          { label: "My Requests", href: "/#requests", icon: Calendar },
+          { label: "Resources", href: "/dashboard#resources", icon: Layers },
+          { label: "My Requests", href: "/dashboard#requests", icon: Calendar },
           { label: "Fair Rules", href: "/rules", icon: BookOpen },
         ];
     }
   };
 
   const navLinks = getNavLinks();
+  const homeHref =
+    role === "admin"
+      ? "/dashboard/admin"
+      : role === "coordinator"
+      ? "/dashboard/coordinator"
+      : "/dashboard";
 
   const roleLabels: Record<Role, { title: string; subtitle: string; color: string }> = {
     student: {
@@ -84,16 +89,13 @@ export function Navbar() {
 
   return (
     <>
-      {/* Animated Brand Intro on Entry */}
-      <UtilixIntro />
-
       <header className="sticky top-0 z-40 w-full border-b-[3.5px] border-[#111111] bg-[#FFF8E7] shadow-[0px_4px_0px_0px_#111111]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20">
             {/* Left: Official Utilix Combination Mark (Design 3) */}
             <div className="flex items-center gap-6 lg:gap-8">
               <Link
-                href="/"
+                href={homeHref}
                 className="flex items-center group focus:outline-none focus:ring-2 focus:ring-black rounded-2xl p-1"
                 aria-label="Utilix Home"
               >

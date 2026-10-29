@@ -7,7 +7,9 @@ function getSafeRedirectUrl(userRole: string, candidate?: string | null): string
     candidate &&
     candidate.startsWith("/") &&
     !candidate.startsWith("//") &&
-    !candidate.includes(":")
+    !candidate.includes(":") &&
+    candidate !== "/" &&
+    candidate !== "/login"
   ) {
     return candidate;
   }
@@ -17,12 +19,12 @@ function getSafeRedirectUrl(userRole: string, candidate?: string | null): string
   if (userRole === "coordinator") {
     return "/dashboard/coordinator";
   }
-  return "/";
+  return "/dashboard";
 }
 
 describe("Google Authentication & User Profile Integration", () => {
-  it("resolves Student role to root campus dashboard", () => {
-    expect(getSafeRedirectUrl("student")).toBe("/");
+  it("resolves Student role to campus student dashboard", () => {
+    expect(getSafeRedirectUrl("student")).toBe("/dashboard");
   });
 
   it("resolves Coordinator role to coordinator dashboard", () => {
@@ -33,10 +35,12 @@ describe("Google Authentication & User Profile Integration", () => {
     expect(getSafeRedirectUrl("admin")).toBe("/dashboard/admin");
   });
 
-  it("prevents open redirect attacks by discarding external URLs", () => {
-    expect(getSafeRedirectUrl("student", "https://malicious.site/phish")).toBe("/");
-    expect(getSafeRedirectUrl("student", "//malicious.site")).toBe("/");
+  it("prevents open redirect attacks and infinite loops", () => {
+    expect(getSafeRedirectUrl("student", "https://malicious.site/phish")).toBe("/dashboard");
+    expect(getSafeRedirectUrl("student", "//malicious.site")).toBe("/dashboard");
     expect(getSafeRedirectUrl("coordinator", "javascript:alert(1)")).toBe("/dashboard/coordinator");
+    expect(getSafeRedirectUrl("student", "/")).toBe("/dashboard");
+    expect(getSafeRedirectUrl("student", "/login")).toBe("/dashboard");
   });
 
   it("allows safe internal redirect URLs", () => {

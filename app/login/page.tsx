@@ -67,7 +67,9 @@ function getSafeRedirectUrl(userRole: string, candidate?: string | null): string
     candidate &&
     candidate.startsWith("/") &&
     !candidate.startsWith("//") &&
-    !candidate.includes(":")
+    !candidate.includes(":") &&
+    candidate !== "/" &&
+    candidate !== "/login"
   ) {
     return candidate;
   }
@@ -77,7 +79,7 @@ function getSafeRedirectUrl(userRole: string, candidate?: string | null): string
   if (userRole === "coordinator") {
     return "/dashboard/coordinator";
   }
-  return "/";
+  return "/dashboard";
 }
 
 function LoginContent() {
