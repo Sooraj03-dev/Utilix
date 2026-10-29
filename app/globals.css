@@ -107,6 +107,33 @@
   animation: sparkle-spin 2s linear infinite;
 }
 
+@keyframes gentle-logo-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: drop-shadow(4px 4px 0px #000000);
+  }
+  50% {
+    opacity: 0.72;
+    transform: scale(1.025);
+    filter: drop-shadow(4px 4px 0px #000000) drop-shadow(0 0 18px rgba(255, 255, 255, 0.75));
+  }
+}
+
+.animate-gentle-pulse {
+  animation: gentle-logo-pulse 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-gentle-pulse,
+  .animate-brutal-blink,
+  .animate-brutal-blink-rapid,
+  .animate-sparkle-spin,
+  .animate-accent-pulse {
+    animation: none !important;
+  }
+}
+
 @layer utilities {
   .brutal-border {
     border: 3.5px solid #111111;

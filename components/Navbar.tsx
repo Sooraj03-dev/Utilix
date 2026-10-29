@@ -87,6 +87,10 @@ export function Navbar() {
     },
   };
 
+  if (pathname === "/") {
+    return null;
+  }
+
   return (
     <>
       <header className="sticky top-0 z-40 w-full border-b-[3.5px] border-[#111111] bg-[#FFF8E7] shadow-[0px_4px_0px_0px_#111111]">

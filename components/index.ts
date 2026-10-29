@@ -21,3 +21,4 @@ export * from "./DashboardSidebar";
 export * from "./GeometricDeco";
 export * from "./UtilixLogo";
 export * from "./UtilixIntro";
+export * from "./StartupScreen";

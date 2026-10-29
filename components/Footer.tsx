@@ -1,9 +1,18 @@
+"use client";
+
 import React from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ShieldCheck, Sparkles, Globe } from "lucide-react";
 import { UtilixLogo } from "./UtilixLogo";
 
 export function Footer() {
+  const pathname = usePathname();
+
+  if (pathname === "/") {
+    return null;
+  }
+
   return (
     <footer className="border-t-[3.5px] border-[#111111] bg-[#FFF8E7] text-[#111111] mt-24 shadow-[0px_-4px_0px_0px_#111111]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
