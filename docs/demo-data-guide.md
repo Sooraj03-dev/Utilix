@@ -1,77 +1,96 @@
-# CampusShare Demo Data & Presentation Script Guide
+# Utilix Demo Data & Presentation Guide
 
-This guide details exactly which seeded accounts, resource assets, and simulated conflicts to use during demo presentations and judge evaluations.
+This guide details the seeded accounts, resource inventory, conflict scenarios, and the structured 3-minute live presentation script matching the actual application.
 
 ---
 
-## 1. Demo Personas & Credentials
+## 1. Verified Seeded Demo Personas
 
-| Persona | Name | Role | Email | Seeded Credits | Target Demo Step |
+| Persona | Name | Role | Email | Seeded Quota | Focus Areas |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Student A** | Aarav Sharma | `student` | `student@campus.edu` | **7** | Steps 1, 2, 3 |
-| **Student B** | Julian Hayes | `student` | `julian.h@campus.edu` | **5** | Step 2 (Contested Slot) |
-| **Lab Coordinator** | Dr. Sarah Lin | `coordinator` | `coordinator@campus.edu` | 50 | Step 4 (Queue & Safety) |
-| **Campus Admin** | Dean Marcus Vance | `admin` | `admin@campus.edu` | 999 | Step 5 (Quotas & Audit) |
+| **Student** | Aarav Sharma | `student` | `aarav.sharma@campus.edu` | **8 / 10 Credits**, 2 Free Off-Peak Sessions/Wk | Senior Capstone, Mechatronics, 96% Trust Rating |
+| **Coordinator** | Dr. Sarah Lin | `coordinator` | `sarah.lin@campus.edu` | **50 Credits** | FabLab Facility Lead, Approvals Queue, Return Condition |
+| **Administrator** | Marcus Vance | `admin` | `marcus.vance@campus.edu` | **999 Credits** | Dean of Facilities, Policy Rules, Quota Allocation, Audit Ledger |
 
 ---
 
-## 2. Step-by-Step Presentation Script
+## 2. Seeded Resource Assets
 
-### Step 1: Discovering Resources as an Interdisciplinary Student
-1. Open the homepage `/` as **Aarav Sharma** (`student`).
-2. Point out the top-right **Credit Pill** showing `7 credits` (highlight that credits are non-monetary and replenish every Monday).
-3. Scroll to the **Live Campus Catalog** (`#resources`).
-4. Filter by **"3D Fabrication"**.
-5. Select the **Prusa XL 5-Toolhead 3D Printer** (Status: `Available`, 2 credits/slot).
-6. Click **"Reserve Slot"** to open the reservation modal.
-7. Note the **"Interdisciplinary Team Membership"** toggle: checking this demonstrates **Rule 3 (+15% Multiplier)** by pairing Mechatronics with Architecture.
-8. Click **"Submit Fair Request"** → A toast confirms the request with an 88% priority score boost, and credits update from 7 to 5.
-
----
-
-### Step 2: The 2-Student Conflict Demonstration (The Core Pitch)
-**Scenario**: Both Aarav Sharma and Julian Hayes request the Friday 14:00 - 17:00 slot on the Prusa XL 3D Printer.
-
-| Factor | Candidate A (Aarav & Maya) | Candidate B (Julian) | Algorithmic Winner |
-| :--- | :--- | :--- | :--- |
-| **Academic Urgency** | Senior Capstone (due in 6 days) | Personal hobby drone frame | **Candidate A** (+35 pts vs +15 pts) |
-| **Team Diversity** | Mechatronics + Visual Arts | Solo (Mechanical Engg) | **Candidate A** (+25 pts vs 0 pts) |
-| **Trust Rating** | 100% on-time return record | 92% (1 strike last month) | **Candidate A** (+20 pts vs +10 pts) |
-| **Quota Cap Check** | 0 active peak slots | 0 active peak slots | **Tie** (+8 pts each) |
-| **Total Score** | **88 / 100 pts** | **33 / 100 pts** | **Candidate A Wins Slot** |
-
----
-
-### Step 3: Inspecting the Signature "Why This Decision?" Receipt
-1. Navigate to `/rules#worked-example` or click **"See Demo Decision Audit"** on `/`.
-2. Open the **DecisionPanel**:
-   - Show judges the composite score progress bar (**88 / 100 pts**).
-   - Expand the **Evaluation Factors Breakdown**: explain each factor weight (Academic Urgency, Interdisciplinary Boost, Trust Score, Quota Usage).
-   - Point out the **Rule Citations**: Rule 1, Rule 3, Rule 5, Rule 8.
-   - Emphasize: *No student is left guessing why they didn't get a machine. Every allocation is mathematically auditable.*
+1. **Prusa XL 5-Toolhead 3D Printer** (`res-01`):
+   - Department: Makerspace & Mechanical Engg
+   - Access: Credits (2 credits / slot)
+   - Status: `available` (4 of 8 slots open today)
+   - Prerequisite: 3D Printing Safety L1
+2. **IoT & Embedded Prototyping Bench** (`res-02`):
+   - Department: Electrical & Computer Engg
+   - Access: Free Baseline (0 credits / slot)
+   - Status: `available` (6 of 10 slots open today)
+   - Includes: 100MHz Scope, ESD-safe station, Arduino/ESP32 kits
+3. **Sony FX3 Full-Frame Cinema Kit** (`res-03`):
+   - Department: School of Media & Journalism
+   - Access: Credits (3 credits / slot)
+   - Status: `waitlisted` (1 of 4 slots open today)
+   - Prerequisite: Cine Gear Care Certification
+4. **Acoustically Isolated Voice & Audio Booth** (`res-04`):
+   - Department: Music & Digital Audio Arts
+   - Access: Credits (1 credit / slot)
+   - Status: `booked` (0 of 6 slots open today)
+   - Includes: WhisperRoom, Neumann TLM 103 microphone
+5. **ShopBot Heavy-Duty CNC Mill** (`res-05`):
+   - Department: Architecture & Spatial Design
+   - Access: Training Required (2 credits / slot)
+   - Status: `maintenance` (Scheduled calibration)
+   - Prerequisite: Heavy Machinery Safety L3
+6. **NVIDIA RTX 6000 Ada GPU Workstation** (`res-06`):
+   - Department: AI & Computational Sciences
+   - Access: Credits (2 credits / slot)
+   - Status: `available` (5 of 8 slots open today)
 
 ---
 
-### Step 4: The 15-Minute Phantom Reclamation (Rule 4)
-1. Julian was placed as **Waitlist #1**.
-2. Explain the **15-Minute Check-in Window**:
-   - If Aarav does not physically scan in at the Engineering Hall B station by 14:15, the reservation is revoked immediately.
-   - Julian receives an automated notification: *"Slot reclaimed! You have 10 minutes to confirm."*
-   - Eliminates empty rooms and phantom hoarding.
+## 3. The 3-Minute Live Presentation Script
+
+### Minute 0:00 – 0:45 | Introduction & Neo-Brutalism Brand Identity
+- **Action**: Open [http://localhost:3000/](http://localhost:3000/) in browser.
+- **Narrative**:
+  > *"Judges, welcome to Utilix — Share. Use. Build. Universities invest millions of dollars in 3D printers, cinema cameras, and makerspaces, yet they sit behind departmental silos. When equipment is unlocked, first-come first-served systems lead to bot-racing and phantom hoarding.*
+  > *Notice our Soft Neo-Brutalist design language: high-contrast black borders, hard offset shadows, vibrant brand yellow, and our blinking geometric Utilix 3D U logo entry experience."*
+- **Action**: Click **"Enter Utilix"** to smoothly transition into the live hub.
 
 ---
 
-### Step 5: Coordinator Queue & Safety Certification Verification
-1. Click the top-right profile menu and switch to **Dr. Sarah Lin (`coordinator`)**.
-2. Notice the navigation changes to **Resource Hub**, **Review Queue**, and **Fair Rules**.
-3. Point out that coordinators review flagged edge-cases (e.g. hazardous ShopBot CNC requiring Safety Level 3).
-4. Highlight that coordinator manual overrides cannot be done silently—every override requires an immutable public written justification.
+### Minute 0:45 – 1:30 | The Interdisciplinary Innovation Story & Booking
+- **Action**: Scroll to the **Interdisciplinary Story** section.
+- **Narrative**:
+  > *"Utilix is built on an interdisciplinary philosophy: what happens when an engineer, a designer, a filmmaker, and an audio producer collaborate?*
+  > *Under Rule 4 of our constitution, teams combining multiple departments receive an objective diversity weight boost."*
+- **Action**: Scroll to the **Equipment Catalog**. Filter by **"3D Fabrication"**. Select the **Prusa XL 3D Printer**. Click **"Reserve Slot"**.
+- **Action**: In the reservation modal, toggle **"Interdisciplinary Team Membership"** (Mechatronics + Visual Arts). Click **"Submit Fair Request"**.
+- **Narrative**:
+  > *"Watch our real credit ledger update in the Credit Pill: Aarav's balance drops from 8 to 6 credits. But if a student needs entry equipment like our IoT Bench, Tier 1 provides 2 completely free off-peak sessions per week with zero credit deduction."*
 
 ---
 
-### Step 6: Dean of Facilities Admin Audit
-1. Switch role to **Marcus Vance (`admin`)**.
-2. Show administrative governance:
-   - Adjusting baseline weekly credit allowances (default 7).
-   - Auditing departmental cross-sharing metrics (proving Mechanical Engineering machines are actually serving Arts and Computing students).
-   - Verifying the campus-wide 98.4% on-time return rate.
+### Minute 1:30 – 2:15 | Transparent Conflict Resolution & "Why This Decision?"
+- **Action**: Navigate to [`/rules`](http://localhost:3000/rules). Scroll to the **Worked Example**.
+- **Narrative**:
+  > *"When two students compete for the same Friday peak slot on our 3D printer, Utilix doesn't flip an opaque coin. We evaluate four deterministic factors:*
+  > *1. Usage Fairness (35% weight) — Aarav has used only 2.5 hours this month.*
+  > *2. Waiting Time (25% weight) — Aarav queued 36 hours ahead.*
+  > *3. Academic Need (20% weight) — Aarav's Senior Capstone is due in 4 days (within our 7-day accredited window).*
+  > *4. Interdisciplinary Diversity (20% weight) — Aarav's team pairs Mechanical Engineering with Visual Arts.*
+  > *Aarav scores 89.8 points, while Julian scores 26.8 points. Julian is placed at Waitlist #1. If Aarav fails to check in within 15 minutes, Julian is automatically promoted!"*
+- **Action**: Scroll down to the **Explainable AI & Fallback Card**.
+- **Narrative**:
+  > *"Notice our Decision Receipt. AI provides human-readable explanations, but code and floating-point math enforce the decision. Even if our AI service goes offline, our deterministic fallback engine guarantees 100% receipt transparency with zero student downtime."*
+
+---
+
+### Minute 2:15 – 3:00 | Multi-Persona Governance & Institutional Impact
+- **Action**: Click **"Sign In"** or open [`/login`](http://localhost:3000/login).
+- **Narrative**:
+  > *"Evaluators can test Utilix instantly through our one-click Demo Personas. Let's switch to Dr. Sarah Lin, FabLab Coordinator."*
+- **Action**: Click **"Dr. Sarah Lin (Coordinator Demo)"**.
+- **Narrative**:
+  > *"The navigation immediately adapts to Coordinator workflows: review queues, safety certification gates, and checkouts. Finally, switching to Marcus Vance (Dean of Facilities) reveals our policy ledger and cross-departmental sharing analytics.*
+  > *With Utilix, campus equipment is no longer locked in departmental silos — it's shared, used, and built fairly by all students. Thank you!"*

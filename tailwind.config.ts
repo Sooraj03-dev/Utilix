@@ -11,7 +11,7 @@ const config: Config = {
       colors: {
         brutal: {
           bg: "#FFD60A", // Bright saturated yellow
-          surface: "#FFF8E7", // Warm cream / off-white
+          surface: "#FFF9E6", // Warm cream / off-white
           white: "#FFFEF2",
           black: "#111111",
           yellow: "#FFD60A",

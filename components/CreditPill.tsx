@@ -60,17 +60,21 @@ export function CreditPill({
           </div>
 
           <p className="text-xs text-[#111111] font-medium mt-2 leading-relaxed">
-            Credits allocate high-demand gear fairly. Every student gets a free Monday refill, plus bonuses for on-time returns.
+            Credits allocate peak, high-demand equipment fairly. Baseline tools are free, and credits are restored on early cancellation.
           </p>
 
           <div className="mt-3 space-y-2 text-xs font-semibold text-[#111111]">
             <div className="flex items-center gap-2 p-1.5 bg-[#4ADE80] rounded-xl border-[2px] border-[#111111]">
               <Sparkles className="w-3.5 h-3.5 flex-shrink-0 stroke-[2.5]" />
-              <span>+3 credits replenish every Monday</span>
+              <span>2 free baseline sessions / week</span>
+            </div>
+            <div className="flex items-center gap-2 p-1.5 bg-[#FFD60A] rounded-xl border-[2px] border-[#111111]">
+              <Coins className="w-3.5 h-3.5 flex-shrink-0 stroke-[2.5]" />
+              <span>10 credits granted monthly</span>
             </div>
             <div className="flex items-center gap-2 p-1.5 bg-[#38BDF8] rounded-xl border-[2px] border-[#111111]">
               <Coins className="w-3.5 h-3.5 flex-shrink-0 stroke-[2.5]" />
-              <span>Full credit refund on early cancel</span>
+              <span>Full refund if cancelled &gt;= 24h</span>
             </div>
           </div>
 

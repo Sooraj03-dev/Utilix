@@ -8,9 +8,25 @@ export type ResourceStatus =
   | "blocked"
   | "maintenance"
   | "rejected"
-  | "booked";
+  | "booked"
+  | "approved"
+  | "checked_out"
+  | "returned"
+  | "cancelled"
+  | "no_show"
+  | "submitted"
+  | "eligibility_passed"
+  | "allocated"
+  | "pending_approval";
 
 export type AccessType = "free" | "credits" | "training_required";
+
+export type DecisionSource = "ai" | "fallback" | null;
+
+export type TiebreakMethod =
+  | "fewest_sessions_month"
+  | "earliest_request"
+  | "seeded_lottery";
 
 export interface DemoUser {
   id: string;
@@ -24,6 +40,7 @@ export interface DemoUser {
   yearOrDesignation: string;
   activeRequestsCount: number;
   trustScore: number; // 0-100% fair return rate
+  isDemo?: boolean;
 }
 
 export interface ResourceItem {
@@ -66,6 +83,9 @@ export interface AllocationDecision {
   alternativeSlots?: string[];
   coordinatorNotes?: string;
   timestamp: string;
+  decisionSource?: DecisionSource;
+  tiebreakMethod?: TiebreakMethod;
+  tiebreakSeed?: string;
 }
 
 export interface BookingRequest {

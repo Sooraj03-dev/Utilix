@@ -12,6 +12,8 @@ import {
   Clock,
   AlertTriangle,
   Info,
+  Cpu,
+  Binary,
 } from "lucide-react";
 import { cn } from "./utils";
 import { AllocationDecision } from "./types";
@@ -28,43 +30,44 @@ const DEFAULT_DEMO_DECISION: AllocationDecision = {
   outcome: "APPROVED",
   score: 88,
   maxPossibleScore: 100,
+  decisionSource: "ai",
   headlineSummary: "Approved: High-impact Capstone + Cross-disciplinary team boost",
   plainLanguageReason:
-    "Your reservation was selected over 3 competing requests because your team pairs Mechanical Engineering with Architecture for an accredited Capstone deadline, and both members maintain a 100% on-time return trust record.",
+    "Your reservation was selected over 3 competing requests because your team pairs Mechanical Engineering with Architecture for an accredited Capstone deadline within 4 days, low recent 30-day session usage, and 36 hours queue waiting time.",
   ruleCitations: [
-    "Rule 1: Academic Curricular Priority",
-    "Rule 3: Cross-Disciplinary Team Multiplier (+15%)",
-    "Rule 5: Reliable Return Trust Rating (+10%)",
-    "Rule 8: Anti-Hoarding Slot Limit Check (Passed)",
+    "Rule 1: Hard Eligibility Verification (Passed)",
+    "Rule 3: Declared Academic Need (Due in 4 days <= 7-day window)",
+    "Rule 4: Usage Fairness Ranking (Low 30-day usage)",
+    "Rule 4: Cross-Disciplinary Team Multiplier (2 faculties: ME + Arch)",
   ],
   factors: [
     {
       factor: "Academic Milestone Urgency",
       weight: "High",
       status: "positive",
-      description: "Senior Capstone submission due within 10 days.",
-      pointsContribution: "+35 pts",
+      description: "Senior Capstone submission due within 4 days (7-day window active).",
+      pointsContribution: "+32 pts",
     },
     {
-      factor: "Interdisciplinary Team Composition",
+      factor: "Usage Fairness Component",
       weight: "High",
       status: "positive",
-      description: "Team includes ME + Architecture students working collaboratively.",
-      pointsContribution: "+25 pts",
+      description: "Only 1 session logged in the last 30 days (rewards low recent usage).",
+      pointsContribution: "+30 pts",
     },
     {
-      factor: "Reliability & Return Reputation",
+      factor: "Interdisciplinary Team Collaboration",
       weight: "Medium",
       status: "positive",
-      description: "Zero strikes in the past 60 days, verified on-time check-in history.",
-      pointsContribution: "+20 pts",
+      description: "Team includes ME + Architecture departments working collaboratively.",
+      pointsContribution: "+16 pts",
     },
     {
-      factor: "Resource Quota Usage",
+      factor: "Queue Waiting Time",
       weight: "Normal",
       status: "positive",
-      description: "Under weekly cap of 6 hours for high-precision 3D fabrication.",
-      pointsContribution: "+8 pts",
+      description: "Request submitted 36 hours in advance (max queue weight at 72h).",
+      pointsContribution: "+10 pts",
     },
   ],
   alternativeSlots: [
@@ -73,6 +76,7 @@ const DEFAULT_DEMO_DECISION: AllocationDecision = {
   ],
   coordinatorNotes: "Verified student has completed Lab Safety Level 2 certification.",
   timestamp: "Oct 29, 2026 • 11:15 AM",
+  tiebreakMethod: "fewest_sessions_month",
 };
 
 export function DecisionPanel({
@@ -126,10 +130,42 @@ export function DecisionPanel({
             <Scale className="w-6 h-6 text-[#111111] stroke-[2.5]" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-[10px] sm:text-xs font-black tracking-wider uppercase bg-[#38BDF8] text-[#111111] border-[1.5px] border-[#111111] px-2 py-0.5 rounded-md">
                 Signature Fair Allocation Logic
               </span>
+              {decision.decisionSource && (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 text-[10px] font-black tracking-wider uppercase px-2 py-0.5 rounded-md border-[1.5px] border-[#111111]",
+                    decision.decisionSource === "ai"
+                      ? "bg-[#C084FC] text-[#111111]"
+                      : "bg-[#FFD60A] text-[#111111]"
+                  )}
+                  title={
+                    decision.decisionSource === "ai"
+                      ? "Synthesized using AI allocation explanation service"
+                      : "Computed via deterministic rules engine fallback"
+                  }
+                >
+                  {decision.decisionSource === "ai" ? (
+                    <Cpu className="w-3 h-3 stroke-[2.5]" />
+                  ) : (
+                    <ShieldCheck className="w-3 h-3 stroke-[2.5]" />
+                  )}
+                  <span>
+                    {decision.decisionSource === "ai"
+                      ? "AI Explanation Engine"
+                      : "Deterministic Fallback"}
+                  </span>
+                </span>
+              )}
+              {decision.tiebreakMethod && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold bg-[#FFFEF2] border-[1.5px] border-[#111111] px-2 py-0.5 rounded-md">
+                  <Binary className="w-3 h-3 stroke-[2.5]" />
+                  <span>Tiebreak: {decision.tiebreakMethod.replace(/_/g, " ")}</span>
+                </span>
+              )}
               <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#FFFEF2] border-[1.5px] border-[#111111] text-[#111111] font-mono font-bold">
                 {decision.requestId}
               </span>

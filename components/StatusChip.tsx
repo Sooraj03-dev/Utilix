@@ -1,4 +1,3 @@
-import React from "react";
 import {
   CheckCircle,
   Clock,
@@ -7,6 +6,12 @@ import {
   Slash,
   Wrench,
   CalendarCheck,
+  PackageCheck,
+  CheckCheck,
+  Sparkles,
+  ShieldAlert,
+  Send,
+  FileCheck2,
 } from "lucide-react";
 import { cn } from "./utils";
 import { ResourceStatus } from "./types";
@@ -31,9 +36,21 @@ const STATUS_CONFIGS: Record<ResourceStatus, StatusConfig> = {
     bgClass: "bg-[#22C55E] text-[#111111]",
     iconClass: "text-[#111111]",
   },
+  approved: {
+    label: "Approved",
+    icon: CheckCircle,
+    bgClass: "bg-[#22C55E] text-[#111111]",
+    iconClass: "text-[#111111]",
+  },
   pending: {
     label: "Pending Review",
     icon: Clock,
+    bgClass: "bg-[#F59E0B] text-[#111111]",
+    iconClass: "text-[#111111]",
+  },
+  pending_approval: {
+    label: "Awaiting Coordinator",
+    icon: ShieldAlert,
     bgClass: "bg-[#F59E0B] text-[#111111]",
     iconClass: "text-[#111111]",
   },
@@ -42,6 +59,48 @@ const STATUS_CONFIGS: Record<ResourceStatus, StatusConfig> = {
     icon: Clock,
     bgClass: "bg-[#F59E0B] text-[#111111]",
     iconClass: "text-[#111111]",
+  },
+  allocated: {
+    label: "Allocated",
+    icon: Sparkles,
+    bgClass: "bg-[#4ADE80] text-[#111111]",
+    iconClass: "text-[#111111]",
+  },
+  eligibility_passed: {
+    label: "Eligible",
+    icon: FileCheck2,
+    bgClass: "bg-[#38BDF8] text-[#111111]",
+    iconClass: "text-[#111111]",
+  },
+  submitted: {
+    label: "Submitted",
+    icon: Send,
+    bgClass: "bg-[#FFD60A] text-[#111111]",
+    iconClass: "text-[#111111]",
+  },
+  checked_out: {
+    label: "Checked Out",
+    icon: PackageCheck,
+    bgClass: "bg-[#38BDF8] text-[#111111]",
+    iconClass: "text-[#111111]",
+  },
+  returned: {
+    label: "Returned",
+    icon: CheckCheck,
+    bgClass: "bg-[#22C55E] text-[#111111]",
+    iconClass: "text-[#111111]",
+  },
+  cancelled: {
+    label: "Cancelled",
+    icon: XCircle,
+    bgClass: "bg-[#9CA3AF] text-white",
+    iconClass: "text-white",
+  },
+  no_show: {
+    label: "No Show",
+    icon: AlertTriangle,
+    bgClass: "bg-[#EF4444] text-white",
+    iconClass: "text-white",
   },
   blocked: {
     label: "Blocked",

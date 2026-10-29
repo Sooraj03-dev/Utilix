@@ -11,10 +11,11 @@ export const DEMO_USERS: Record<Role, DemoUser> = {
     role: "student",
     department: "Mechatronics & Robotics",
     yearOrDesignation: "Year 4 (Senior)",
-    credits: 7,
+    credits: 8,
     maxCredits: 10,
     activeRequestsCount: 2,
     trustScore: 96,
+    isDemo: true,
   },
   coordinator: {
     id: "usr_coord_01",
@@ -27,6 +28,7 @@ export const DEMO_USERS: Record<Role, DemoUser> = {
     maxCredits: 50,
     activeRequestsCount: 5,
     trustScore: 100,
+    isDemo: true,
   },
   admin: {
     id: "usr_admin_01",
@@ -39,6 +41,7 @@ export const DEMO_USERS: Record<Role, DemoUser> = {
     maxCredits: 999,
     activeRequestsCount: 0,
     trustScore: 100,
+    isDemo: true,
   },
 };
 
@@ -54,8 +57,8 @@ const INITIAL_NOTIFICATIONS: AppNotification[] = [
   },
   {
     id: "notif_2",
-    title: "Weekly Credits Replenished",
-    message: "+3 base credits credited to your account for maintaining a 100% return-on-time score.",
+    title: "Monthly Credits Active",
+    message: "10 monthly credits available. 2 weekly free off-peak sessions remaining.",
     timestamp: "2 hours ago",
     read: false,
     type: "info",

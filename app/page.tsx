@@ -210,10 +210,17 @@ export default function LandingPage() {
     }
 
     setIsReserveModalOpen(false);
-    success(
-      `Your request for ${selectedResource.name} was queued with an 88% priority score boost!`,
-      "Request Logged in Utilix"
-    );
+    if (cost > 0) {
+      success(
+        `Demo request submitted for ${selectedResource.name}. Deducted ${cost} credit${cost > 1 ? "s" : ""} (Remaining balance: ${user.credits - cost}). Queued for fair allocation ranking.`,
+        "Request Queued in Utilix"
+      );
+    } else {
+      success(
+        `Demo request submitted for ${selectedResource.name} under weekly free off-peak baseline (0 credits deducted). Queued for fair allocation ranking.`,
+        "Free Baseline Slot Queued"
+      );
+    }
   };
 
   return (
@@ -281,27 +288,37 @@ export default function LandingPage() {
               </Link>
             </div>
 
-            {/* Live Counters in Neo-Brutalist Block Cards */}
-            <div className="pt-10 grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 border-t-[3px] border-[#111111] max-w-4xl mx-auto text-left">
-              <div className="p-4 bg-[#FFFEF2] rounded-2xl border-[3px] border-[#111111] shadow-[4px_4px_0px_#111]">
-                <p className="text-2xl sm:text-3xl font-black text-[#111111] tabular-nums">142+</p>
-                <p className="text-xs font-black text-[#111111] mt-0.5">Shared Lab Assets</p>
-                <p className="text-[11px] font-bold text-[#22C55E] mt-1">Across 7 Departments</p>
+            {/* Campus Demo Statistics in Neo-Brutalist Block Cards (Explicitly labeled) */}
+            <div className="pt-8 border-t-[3px] border-[#111111] max-w-4xl mx-auto text-left space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono font-black uppercase tracking-wider bg-[#FFD60A] border-[1.5px] border-black px-2.5 py-0.5 rounded-full shadow-[1px_1px_0px_#111]">
+                  Campus Pilot Benchmarks (Demonstration Targets)
+                </span>
+                <span className="text-[11px] font-bold text-[#111111]/70">
+                  Targeted Pilot Scale
+                </span>
               </div>
-              <div className="p-4 bg-[#FFFEF2] rounded-2xl border-[3px] border-[#111111] shadow-[4px_4px_0px_#111]">
-                <p className="text-2xl sm:text-3xl font-black text-[#111111] tabular-nums">98.4%</p>
-                <p className="text-xs font-black text-[#111111] mt-0.5">On-Time Returns</p>
-                <p className="text-[11px] font-bold text-[#38BDF8] mt-1">Reliability Incentive</p>
-              </div>
-              <div className="p-4 bg-[#FFFEF2] rounded-2xl border-[3px] border-[#111111] shadow-[4px_4px_0px_#111]">
-                <p className="text-2xl sm:text-3xl font-black text-[#111111] tabular-nums">0 hrs</p>
-                <p className="text-xs font-black text-[#111111] mt-0.5">Phantom Hoarding</p>
-                <p className="text-[11px] font-bold text-[#22C55E] mt-1">Auto-Released Slots</p>
-              </div>
-              <div className="p-4 bg-[#FFFEF2] rounded-2xl border-[3px] border-[#111111] shadow-[4px_4px_0px_#111]">
-                <p className="text-2xl sm:text-3xl font-black text-[#111111] tabular-nums">$0.00</p>
-                <p className="text-xs font-black text-[#111111] mt-0.5">Student Out-of-Pocket</p>
-                <p className="text-[11px] font-bold text-[#C084FC] mt-1">100% Free Campus Pool</p>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+                <div className="p-4 bg-[#FFFEF2] rounded-2xl border-[3px] border-[#111111] shadow-[4px_4px_0px_#111]">
+                  <p className="text-2xl sm:text-3xl font-black text-[#111111] tabular-nums">142+</p>
+                  <p className="text-xs font-black text-[#111111] mt-0.5">Shared Lab Assets</p>
+                  <p className="text-[11px] font-bold text-[#22C55E] mt-1">Across 7 Departments</p>
+                </div>
+                <div className="p-4 bg-[#FFFEF2] rounded-2xl border-[3px] border-[#111111] shadow-[4px_4px_0px_#111]">
+                  <p className="text-2xl sm:text-3xl font-black text-[#111111] tabular-nums">98.4%</p>
+                  <p className="text-xs font-black text-[#111111] mt-0.5">On-Time Returns</p>
+                  <p className="text-[11px] font-bold text-[#38BDF8] mt-1">Punctuality Standard</p>
+                </div>
+                <div className="p-4 bg-[#FFFEF2] rounded-2xl border-[3px] border-[#111111] shadow-[4px_4px_0px_#111]">
+                  <p className="text-2xl sm:text-3xl font-black text-[#111111] tabular-nums">0 hrs</p>
+                  <p className="text-xs font-black text-[#111111] mt-0.5">Phantom Hoarding</p>
+                  <p className="text-[11px] font-bold text-[#22C55E] mt-1">15m Auto-Release</p>
+                </div>
+                <div className="p-4 bg-[#FFFEF2] rounded-2xl border-[3px] border-[#111111] shadow-[4px_4px_0px_#111]">
+                  <p className="text-2xl sm:text-3xl font-black text-[#111111] tabular-nums">$0.00</p>
+                  <p className="text-xs font-black text-[#111111] mt-0.5">Student Out-of-Pocket</p>
+                  <p className="text-[11px] font-bold text-[#C084FC] mt-1">100% Free Baseline Pool</p>
+                </div>
               </div>
             </div>
           </div>
@@ -310,7 +327,7 @@ export default function LandingPage() {
 
       {/* 2. THE INTERDISCIPLINARY STORY */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-[#FFF8E7] rounded-[36px] border-[4px] border-[#111111] p-6 sm:p-10 lg:p-12 shadow-[8px_8px_0px_0px_#111111] relative overflow-hidden">
+        <div className="bg-[#FFF9E6] rounded-[36px] border-[4px] border-[#111111] p-6 sm:p-10 lg:p-12 shadow-[8px_8px_0px_0px_#111111] relative overflow-hidden">
           <div className="max-w-3xl space-y-4 relative z-10">
             <div className="flex items-center gap-2">
               <span className="text-xs font-black tracking-wider uppercase bg-[#FFD60A] text-[#111111] px-3.5 py-1 rounded-full border-[2px] border-[#111111] shadow-[2px_2px_0px_#111]">
@@ -327,7 +344,7 @@ export default function LandingPage() {
               Traditional universities trap gear in departmental silos. The Mechanical Engineering 3D printer sits locked for CS students. The Cinema Sony FX3 camera is barred for roboticists building computer vision documentaries.
             </p>
             <p className="text-sm sm:text-base text-[#111111] font-black">
-              Utilix dismantles departmental walls. Under <span className="bg-[#FFD60A] border-[2px] border-[#111111] px-1.5 py-0.5 rounded-lg shadow-[2px_2px_0px_#111]">Rule 3 (Cross-Disciplinary Multiplier)</span>, teams combining diverse majors receive a guaranteed priority bump.
+              Utilix dismantles departmental walls. Under <span className="bg-[#FFD60A] border-[2px] border-[#111111] px-1.5 py-0.5 rounded-lg shadow-[2px_2px_0px_#111]">Rule 4 (Fair Ranking Formula)</span>, student teams teaming across diverse faculties receive a 20% interdisciplinary diversity weight boost.
             </p>
           </div>
 
@@ -453,7 +470,7 @@ export default function LandingPage() {
 
       {/* 4. HYBRID ACCESS EXPLAINER (FREE BASELINE + CREDITS) */}
       <section id="hybrid-model" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-[#FFF8E7] rounded-[36px] border-[4px] border-[#111111] p-6 sm:p-10 shadow-[8px_8px_0px_0px_#111111]">
+        <div className="bg-[#FFF9E6] rounded-[36px] border-[4px] border-[#111111] p-6 sm:p-10 shadow-[8px_8px_0px_0px_#111111]">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
             <div className="space-y-5">
               <span className="text-xs font-black uppercase tracking-wider text-[#111111] bg-[#4ADE80] px-3.5 py-1 rounded-full border-[2px] border-[#111111] shadow-[2px_2px_0px_#111]">
@@ -471,10 +488,10 @@ export default function LandingPage() {
                   <CheckCircle2 className="w-6 h-6 text-[#22C55E] flex-shrink-0 mt-0.5 stroke-[2.5]" />
                   <div>
                     <h4 className="text-sm font-black text-[#111111]">
-                      Tier 1: Free Baseline (Unlimited Free Hours)
+                      Tier 1: Free Baseline (2 Off-Peak Sessions / Week)
                     </h4>
                     <p className="text-xs font-medium text-[#111111]/80 mt-0.5 leading-relaxed">
-                      Soldering stations, standard hand tools, entry 3D printers, and general study booths cost 0 credits.
+                      Soldering stations, standard bench tools, and weekday morning off-peak slots cost 0 credits. Automatically resets each Monday at 00:00 UTC.
                     </p>
                   </div>
                 </div>
@@ -483,10 +500,10 @@ export default function LandingPage() {
                   <Coins className="w-6 h-6 text-[#F59E0B] flex-shrink-0 mt-0.5 stroke-[2.5]" />
                   <div>
                     <h4 className="text-sm font-black text-[#111111]">
-                      Tier 2: High-Demand Shared Credits (Refreshed Weekly)
+                      Tier 2: High-Demand Shared Credits (10 Monthly Credits)
                     </h4>
                     <p className="text-xs font-medium text-[#111111]/80 mt-0.5 leading-relaxed">
-                      Every student receives 7 credits each Monday. High-demand items (cinema cameras, heavy CNC, GPU clusters) cost 1–3 credits.
+                      Every student receives 10 credits monthly. Scarce gear (cinema cameras, heavy CNC, GPU clusters) costs 1–3 credits. Full refund if cancelled &gt;= 24h.
                     </p>
                   </div>
                 </div>
@@ -747,7 +764,7 @@ export default function LandingPage() {
                 Project Classification & Milestones
               </label>
               <select className="w-full rounded-2xl border-[3px] border-[#111111] bg-[#FFFEF2] p-3 text-xs sm:text-sm font-bold text-[#111111] shadow-[3px_3px_0px_#111] focus:outline-none">
-                <option>Accredited Senior Capstone (Deadline within 14 days)</option>
+                <option>Accredited Senior Capstone (Deadline within 7 days)</option>
                 <option>Interdisciplinary Cross-Faculty Project</option>
                 <option>Standard Coursework Assignment</option>
                 <option>Recognized Student Engineering Club</option>
@@ -778,7 +795,7 @@ export default function LandingPage() {
               />
               <label htmlFor="cross-dept" className="text-xs text-[#111111]">
                 <strong className="block font-black text-sm">Interdisciplinary Team Membership</strong>
-                Checking this triggers <span className="bg-[#FFD60A] px-1.5 py-0.5 rounded border border-black font-black">Rule 3 (+15% Multiplier)</span> when teaming with students from other academic departments.
+                Checking this triggers <span className="bg-[#FFD60A] px-1.5 py-0.5 rounded border border-black font-black">Rule 4 (20% Diversity Weight)</span> when teaming with students from other academic departments.
               </label>
             </div>
           </div>

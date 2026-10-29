@@ -1,35 +1,39 @@
-# CampusShare Bug Log & Quality Assurance Tracker
+# Utilix Bug Log & Quality Assurance Tracker
 
-This document tracks all identified UI/UX defects, mobile responsiveness checks, accessibility audits, and edge-case behaviors across the platform.
+This document tracks all identified UI/UX defects, responsive design issues, accessibility audits, and integration discrepancies across the Utilix platform.
 
 ---
 
 ## Quality Metrics & Acceptance Standards
-- **Viewport target**: Minimum 360px width without horizontal scrolling or clipped text.
-- **Touch target size**: All interactive elements must satisfy $\ge 44 \times 44\text{px}$.
-- **Status color rule**: Never display color alone; always pair with explicit icon + text label.
-- **Accessibility**: Keyboard navigable (Escape, Tab focus rings), high-contrast text.
+- **Viewport Target**: Minimum `360px` width without horizontal scrollbars, clipped text, or broken grids.
+- **Touch Target Size**: All interactive buttons, inputs, modal triggers, and links satisfy $\ge 44 \times 44\text{px}$.
+- **Status Accessibility Rule**: Never display color alone; always pair an accessible SVG icon with an explicit text label.
+- **Keyboard Usability**: Visible high-contrast focus rings (`0 0 0 3px #111111, 0 0 0 5px #FFD60A`), Escape key modal dismissal.
+- **Truthful System Integrity**: No fake SSO claims, no fabricated live counters, and explicit fallback badging.
 
 ---
 
-## Bug Log Table
+## Comprehensive Factual Bug Log
 
-| ID | Page / Component | Steps to Reproduce | Severity | Owner | Status | Resolution Notes |
+| ID | Component / Area | Severity | Owner | Status | Reproduction Steps & Defect Details | Actual Resolution |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **BUG-001** | Global / Navbar | Open hamburger menu on iPhone SE (375px) then rotate device. | Low | Full Stack C | **Fixed** | Added `overflow-hidden` on body during active drawer state and synced Tailwind breakpoint triggers. |
-| **BUG-002** | `/` Catalog Filter | Horizontal filter buttons overflowed edge on 360px viewport. | Medium | Full Stack C | **Fixed** | Wrapped filter container in `overflow-x-auto scrollbar-none` with smooth touch momentum scrolling. |
-| **BUG-003** | `/rules` Worked Ex | Long formula code tags wrapped awkwardly on narrow screens. | Low | Full Stack C | **Fixed** | Added `break-words` and custom typography classes on code tags inside rule cards. |
-| **BUG-004** | `CreditPill` | Tooltip would clip on right-hand edge on small screens. | Medium | Full Stack C | **Fixed** | Anchored popover to `right-0` with `max-w-xs` responsive clamp. |
-| **BUG-005** | `DecisionPanel` | Accordion chevron lacked dedicated `aria-label` for screen readers. | Low | Full Stack C | **Fixed** | Added explicit `aria-label="Expand/Collapse panel"` and keyboard toggle support. |
-| **BUG-006** | `Modal` | Background content scrolled while modal overlay was open. | Medium | Full Stack C | **Fixed** | Implemented `document.body.style.overflow = "hidden"` on modal mount and cleanup on unmount. |
-| **BUG-007** | `/login` Demo Form | Clicking demo personas did not provide persistent feedback. | Low | Full Stack C | **Fixed** | Integrated `useToast()` toast system showing instant visual feedback when switching demo personas. |
-| **BUG-008** | `StatusChip` | Status chip for `blocked` used plain text without icon. | High | Full Stack C | **Fixed** | Updated `StatusChip.tsx` to strictly bind Lucide icons (`Slash`, `Wrench`, `Clock`, `CheckCircle`) to all 8 statuses. |
-| **BUG-009** | Touch Targets | Mobile close buttons in modals measured 32px height. | Medium | Full Stack C | **Fixed** | Enforced `min-h-[44px] min-w-[44px]` touch targets on all modal triggers and close icons. |
-| **BUG-010** | `Skeleton` | Skeletons had no accessible ARIA attributes. | Low | Full Stack C | **Fixed** | Added `aria-hidden="true"` to prevent screen reader noise during simulated loading phases. |
+| **BUG-001** | `Navbar.tsx` | Medium | Full Stack C | **Fixed** | Opening mobile navigation drawer on 375px viewport allowed background content to continue scrolling underneath. | Added `useEffect` in `Navbar.tsx` applying `document.body.style.overflow = "hidden"` while `isOpen` is true with proper cleanup. |
+| **BUG-002** | `app/page.tsx` Catalog | Medium | Full Stack C | **Fixed** | Category filter button strip clipped and triggered horizontal page blowout on 360px viewports. | Wrapped category list in `overflow-x-auto scrollbar-none` with `min-h-[44px]` touch targets and flex padding. |
+| **BUG-003** | `CreditPill.tsx` | High | Full Stack C | **Fixed** | Credit popover anchored off-screen on mobile devices (< 400px), cutting off quota reset rules. | Clamped popover to `right-0` with `w-72` responsive boundaries, high z-index, and clear 10 credits / 2 free sessions text. |
+| **BUG-004** | `StatusChip.tsx` | High | Full Stack C | **Fixed** | Missing visual status configs for 9 workflow statuses (`approved`, `checked_out`, `returned`, `cancelled`, `no_show`, `submitted`, `eligibility_passed`, `allocated`, `pending_approval`). | Expanded `StatusChip.tsx` mapping with distinct Lucide icons, brutalist borders, and accessible labels for all 17 statuses. |
+| **BUG-005** | `DecisionPanel.tsx` | Medium | Full Stack C | **Fixed** | Decision receipt lacked clear indication of whether explanation was generated by AI or deterministic fallback. | Added explicit `decisionSource` indicator with purple AI badge or yellow Deterministic Fallback badge and tiebreaker hash. |
+| **BUG-006** | `app/rules/page.tsx` | High | Full Stack C | **Fixed** | Previous documentation stated outdated rules (14-day deadline window, +15% multiplier, 7 credits weekly). | Replaced with true agreed policy: 7-day academic deadline window, 10 credits/month, 2 free off-peak sessions/wk, 4-factor scoring. |
+| **BUG-007** | `app/login/page.tsx` | High | Full Stack C | **Fixed** | Form claimed "Campus SSO Authenticated" upon clicking submit with dummy credentials, violating honesty rules. | Labeled preview mode explicitly as "Campus Email Sign-In (Preview Mode)", added field validation, and stated SSO integration status. |
+| **BUG-008** | `Modal.tsx` | Medium | Full Stack C | **Fixed** | Modal lacked keyboard `Escape` key dismissal and accessible `aria-modal` / `role="dialog"` attributes. | Added `keydown` event listener for `Escape`, `role="dialog"`, `aria-modal="true"`, and `aria-labelledby` attributes. |
+| **BUG-009** | `Button.tsx` Touch Targets | Medium | Full Stack C | **Fixed** | Small size variant (`size="sm"`) measured 34px height, violating the 44px mobile touch target rule. | Added `min-h-[44px]` to interactive button utilities and ensured adequate touch padding across all mobile controls. |
+| **BUG-010** | `Skeleton.tsx` | Low | Full Stack C | **Fixed** | Skeletons lacked `aria-hidden="true"`, causing screen readers to announce meaningless empty div placeholders. | Added `aria-hidden="true"` to base `Skeleton`, `ResourceCardSkeleton`, and `RequestRowSkeleton` components. |
+| **BUG-011** | `UtilixIntro.tsx` Entry | High | Full Stack C | **Fixed** | Entry animation was blocked by `sessionStorage` on browser reload and lacked the requested blinking geometric U logo. | Removed `sessionStorage` gate so intro triggers cleanly on refresh/browser load; added centered blinking U logo and Enter button. |
+| **BUG-012** | `app/page.tsx` Counters | High | Full Stack C | **Fixed** | Metric counters appeared as unverified live production data without clear labeling. | Badged the metrics strip explicitly as `"Campus Pilot Benchmarks (Demonstration Targets)"` to maintain complete integrity. |
+| **BUG-013** | TypeScript Build Cache | High | Full Stack C | **Fixed** | Executing `next build` concurrently with active `next dev` daemon overwrote `.next` manifests and caused 404 cache faults. | Terminated stale process, refreshed dev server daemon on port 3000, and verified 200 OK across all routes. |
 
 ---
 
-## Severity Definitions
-- **High**: Violates core design system or functional fairness logic (e.g. status without icon, broken modal trap).
-- **Medium**: Affects usability on specific screen widths (e.g. horizontal scroll on 360px).
-- **Low**: Polish, cosmetic alignment, or redundant DOM attributes.
+## Severity Criteria
+- **High**: Violates core brand identity, accessibility guidelines, fairness rules, or crashes build.
+- **Medium**: Responsive layout defect on specific viewports (e.g. 360px), missing touch targets, or missing ARIA roles.
+- **Low**: Cosmetic token alignment or minor visual polish.

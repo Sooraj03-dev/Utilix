@@ -18,7 +18,7 @@ export function Skeleton({ className, ...props }: SkeletonProps) {
 
 export function ResourceCardSkeleton() {
   return (
-    <div className="bg-[#FFF8E7] rounded-3xl border-[3.5px] border-[#111111] p-5 shadow-[5px_5px_0px_#111] space-y-4">
+    <div className="bg-[#FFF9E6] rounded-3xl border-[3.5px] border-[#111111] p-5 shadow-[5px_5px_0px_#111] space-y-4">
       <Skeleton className="h-44 w-full rounded-2xl" />
       <div className="flex items-center justify-between">
         <Skeleton className="h-5 w-24 rounded-lg" />
@@ -37,7 +37,7 @@ export function ResourceCardSkeleton() {
 
 export function RequestRowSkeleton() {
   return (
-    <div className="p-4 bg-[#FFF8E7] rounded-2xl border-[3px] border-[#111111] shadow-[3px_3px_0px_#111] flex items-center justify-between gap-4">
+    <div className="p-4 bg-[#FFF9E6] rounded-2xl border-[3px] border-[#111111] shadow-[3px_3px_0px_#111] flex items-center justify-between gap-4">
       <div className="flex items-center gap-3">
         <Skeleton className="w-12 h-12 rounded-2xl" />
         <div className="space-y-2">
