@@ -1,5 +1,7 @@
 import React from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { requireSessionUser } from "@/lib/auth/pages";
 import {
   Scale,
   Percent,
@@ -70,6 +72,10 @@ function FairnessBadge({ score, label, gini }: { score: number; label: FairnessL
 }
 
 export default async function AdminDashboardPage() {
+  const user = await requireSessionUser();
+  if (user.role !== "admin") {
+    redirect("/dashboard");
+  }
   const kpis = await loadAdminKpis(30);
 
   // Status breakdown total
