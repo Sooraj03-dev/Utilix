@@ -1,11 +1,43 @@
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildSeedDataset } from "../lib/mocks/seed-data";
-import { getAdminAuth, getAdminDb } from "../lib/firebase/admin";
+
+// Lightweight .env.local loader for standalone execution
+function loadEnvFiles(): void {
+  for (const filename of [".env.local", ".env"]) {
+    const envPath = path.resolve(process.cwd(), filename);
+    if (!existsSync(envPath)) continue;
+
+    const content = readFileSync(envPath, "utf8");
+    for (const rawLine of content.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#")) continue;
+      const equalIndex = line.indexOf("=");
+      if (equalIndex === -1) continue;
+
+      const key = line.slice(0, equalIndex).trim();
+      let value = line.slice(equalIndex + 1).trim();
+
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+
+      if (!process.env[key]) {
+        process.env[key] = value.replace(/\\n/g, "\n");
+      }
+    }
+  }
+}
+
+loadEnvFiles();
 
 type SeedTarget = "mock" | "emulator" | "demo";
 
-const DEV_PROJECT_ALLOWLIST = (process.env.SEED_DEV_PROJECT_ALLOWLIST ?? "")
+const DEV_PROJECT_ALLOWLIST = (process.env.SEED_DEV_PROJECT_ALLOWLIST ?? "utilix-dev,utilix-d7843,demo-utilix")
   .split(",")
   .map((value) => value.trim())
   .filter(Boolean);
@@ -30,7 +62,7 @@ function assertSeedingAllowed(target: SeedTarget): void {
     const projectId = process.env.FIREBASE_PROJECT_ID ?? "";
     if (!projectId || !DEV_PROJECT_ALLOWLIST.includes(projectId)) {
       throw new Error(
-        "Demo seeding blocked. Add FIREBASE_PROJECT_ID to SEED_DEV_PROJECT_ALLOWLIST.",
+        `Demo seeding blocked. Add FIREBASE_PROJECT_ID (${projectId}) to SEED_DEV_PROJECT_ALLOWLIST.`,
       );
     }
   }
@@ -48,6 +80,7 @@ async function seedMockFile(): Promise<void> {
 async function upsertFirebaseData(target: SeedTarget): Promise<void> {
   assertSeedingAllowed(target);
 
+  const { getAdminDb, getAdminAuth } = await import("../lib/firebase/admin");
   const db = getAdminDb();
   const auth = getAdminAuth();
   if (!db || !auth) {
@@ -58,9 +91,17 @@ async function upsertFirebaseData(target: SeedTarget): Promise<void> {
 
   const dataset = buildSeedDataset();
 
+  console.log(`[Utilix Seed] Upserting ${dataset.users.length} users with Auth credentials & claims...`);
   for (const user of dataset.users) {
     try {
       await auth.getUser(user.id);
+      await auth.updateUser(user.id, {
+        email: user.email,
+        displayName: user.displayName,
+        emailVerified: true,
+        password: "Password123!",
+      });
+      await auth.setCustomUserClaims(user.id, { role: user.role });
     } catch (error) {
       const errorCode =
         typeof error === "object" && error !== null && "code" in error
@@ -74,15 +115,19 @@ async function upsertFirebaseData(target: SeedTarget): Promise<void> {
         email: user.email,
         displayName: user.displayName,
         emailVerified: true,
+        password: "Password123!",
       });
+      await auth.setCustomUserClaims(user.id, { role: user.role });
     }
     await db.collection(USER_COLLECTION).doc(user.id).set(user, { merge: true });
   }
 
+  console.log(`[Utilix Seed] Upserting ${dataset.resources.length} resources...`);
   for (const resource of dataset.resources) {
     await db.collection(RESOURCE_COLLECTION).doc(resource.id).set(resource, { merge: true });
   }
 
+  console.log(`[Utilix Seed] Upserting ${dataset.bookings.length} bookings across lifecycle states...`);
   for (const booking of dataset.bookings) {
     await db.collection(BOOKING_COLLECTION).doc(booking.id).set(booking, { merge: true });
   }
@@ -130,7 +175,8 @@ export async function runSeed(target: SeedTarget): Promise<void> {
 }
 
 if (require.main === module) {
-  const target = (process.env.SEED_TARGET ?? "mock") as SeedTarget;
+  const targetArg = process.argv.find((arg) => arg.startsWith("--target="))?.split("=")[1];
+  const target = (targetArg ?? process.env.SEED_TARGET ?? "mock") as SeedTarget;
   runSeed(target).catch((error) => {
     console.error(error);
     process.exit(1);

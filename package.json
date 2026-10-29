@@ -8,10 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run tests/unit",
+    "test": "vitest run tests/unit tests/auth tests/seed",
     "test:db": "firebase --non-interactive --project demo-utilix emulators:exec --only firestore \"vitest run tests/emulator\"",
     "emulators": "firebase emulators:start --config firebase/firebase.json",
-    "seed": "npx tsx scripts/seed.ts",
+    "seed": "npx tsx --conditions=react-server scripts/seed.ts",
     "dev:ai": "cd ai-service && uvicorn app.main:app --reload --port 8000",
     "test:ai": "cd ai-service && python -m pytest"
   },

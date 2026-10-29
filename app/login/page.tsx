@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
   Mail,
@@ -10,7 +10,9 @@ import {
   Sparkles,
   ShieldCheck,
   AlertCircle,
-  Info,
+  CheckCircle2,
+  KeyRound,
+  UserPlus,
 } from "lucide-react";
 import {
   Button,
@@ -23,67 +25,147 @@ import {
 import { useRole, DEMO_USERS } from "@/components/RoleContext";
 import { useToast } from "@/components/ToastContext";
 import { Role } from "@/components/types";
+import { getFirebaseClientAuth, isFirebaseClientConfigured } from "@/lib/firebase/client";
+import { signInWithEmailAndPassword } from "firebase/auth";
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { role, setRole } = useRole();
-  const { success, info } = useToast();
+  const { success: toastSuccess, error: toastError, info: toastInfo } = useToast();
 
-  const [email, setEmail] = useState("");
+  const isVerified = searchParams.get("verified") === "true";
+  const isReset = searchParams.get("reset") === "true";
+  const emailParam = searchParams.get("email") || "";
+
+  const [email, setEmail] = useState(emailParam);
   const [password, setPassword] = useState("");
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleDemoLogin = (targetRole: Role) => {
+  useEffect(() => {
+    if (emailParam) {
+      setEmail(emailParam);
+    }
+  }, [emailParam]);
+
+  const handleDemoLogin = async (targetRole: Role) => {
     setRole(targetRole);
     const persona = DEMO_USERS[targetRole];
-    success(
-      `Demo session active: ${persona.name} (${targetRole.toUpperCase()}). Loaded with demo quota and permissions.`,
+
+    // Map to realistic credentials
+    const demoCredentials: Record<Role, { email: string; pass: string }> = {
+      student: { email: "aarav.sharma@campus.edu", pass: "Password123!" },
+      coordinator: { email: "meera.rao@campus.edu", pass: "Password123!" },
+      admin: { email: "marcus.vance@campus.edu", pass: "Password123!" },
+    };
+
+    const cred = demoCredentials[targetRole];
+    setEmail(cred.email);
+    setPassword(cred.pass);
+
+    // Call mock auth endpoint to set session cookie if supported
+    try {
+      await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cred.email, password: cred.pass }),
+      });
+    } catch {
+      // ignore
+    }
+
+    toastSuccess(
+      `Demo session active: ${persona.name} (${targetRole.toUpperCase()}). Loaded with quota and permissions.`,
       "Demo Persona Activated"
     );
     router.push("/");
   };
 
-  const handleStandardLogin = (e: React.FormEvent) => {
+  const handleStandardLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newErrors: { email?: string; password?: string } = {};
+    const newErrors: { email?: string; password?: string; general?: string } = {};
 
-    if (!email) {
+    if (!email.trim()) {
       newErrors.email = "University email is required.";
     } else if (!email.includes("@")) {
       newErrors.email = "Please enter a valid university email address.";
-    } else if (!email.endsWith(".edu") && !email.includes("campus")) {
-      newErrors.email = "Please use an authorized campus email (e.g., student@campus.edu).";
     }
 
     if (!password) {
       newErrors.password = "Password is required.";
-    } else if (password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters.";
     }
 
     setErrors(newErrors);
-
-    if (Object.keys(newErrors).length > 0) {
-      return;
-    }
+    if (Object.keys(newErrors).length > 0) return;
 
     setIsLoading(true);
-    setTimeout(() => {
+
+    try {
+      // 1. Try real Firebase Client Auth if configured
+      if (isFirebaseClientConfigured()) {
+        const auth = getFirebaseClientAuth();
+        if (auth) {
+          try {
+            const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+            const idToken = await userCredential.user.getIdToken(true);
+
+            // Establish secure HTTP-only session cookie
+            const sessionRes = await fetch("/api/auth/session", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ idToken }),
+            });
+
+            if (sessionRes.ok) {
+              toastSuccess("Signed in successfully to Utilix!", "Welcome Back");
+              router.push("/");
+              return;
+            }
+          } catch (firebaseErr: unknown) {
+            const fbCode = (firebaseErr as { code?: string }).code;
+            if (fbCode === "auth/invalid-credential" || fbCode === "auth/wrong-password" || fbCode === "auth/user-not-found") {
+              // Try fallback mock auth before failing
+            } else {
+              console.warn("[Utilix Auth] Firebase client error, trying fallback:", firebaseErr);
+            }
+          }
+        }
+      }
+
+      // 2. Try Mock Auth endpoint (supports local demo accounts)
+      const mockRes = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+
+      if (mockRes.ok) {
+        const data = await mockRes.json();
+        if (data.user?.role) {
+          setRole(data.user.role as Role);
+        }
+        toastSuccess(`Signed in as ${data.user?.displayName || "User"}.`, "Authentication Complete");
+        router.push("/");
+        return;
+      }
+
+      // If both failed:
+      setErrors({ general: "Invalid email or password. Please verify your credentials or register." });
+      toastError("Invalid email or password.", "Sign In Failed");
+    } catch (err) {
+      console.error(err);
+      setErrors({ general: "Could not connect to authentication service." });
+      toastError("Could not reach authentication server.", "Connection Error");
+    } finally {
       setIsLoading(false);
-      setRole("student");
-      info(
-        "Activated student demo session. (Production SAML/OAuth is staged for campus directory deployment).",
-        "Demo Session Active"
-      );
-      router.push("/");
-    }, 500);
+    }
   };
 
   return (
-    <div className="min-h-[calc(100vh-140px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-[calc(100vh-140px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-[#FFFDF8]">
       <div className="max-w-md w-full space-y-8 text-center">
-        {/* Header Branding with Utilix App Icon */}
+        {/* Header Branding */}
         <div className="flex flex-col items-center">
           <Link href="/" className="inline-block group hover:scale-105 transition-transform" aria-label="Utilix Home">
             <UtilixAppIcon size={84} />
@@ -95,6 +177,25 @@ export default function LoginPage() {
             Share. Use. Build. Transparent campus resource sharing, waitlist tracking, and fair allocation.
           </p>
         </div>
+
+        {/* Success Banners from verification or reset */}
+        {isVerified && (
+          <div className="p-4 bg-emerald-50 border-[2px] border-emerald-500 rounded-2xl flex items-start gap-3 text-left shadow-[2px_2px_0px_#111]">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+            <div className="text-xs font-bold text-emerald-900">
+              <strong>Account verified!</strong> Your campus profile is ready. Please sign in below.
+            </div>
+          </div>
+        )}
+
+        {isReset && (
+          <div className="p-4 bg-emerald-50 border-[2px] border-emerald-500 rounded-2xl flex items-start gap-3 text-left shadow-[2px_2px_0px_#111]">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+            <div className="text-xs font-bold text-emerald-900">
+              <strong>Password updated!</strong> Please sign in with your new password.
+            </div>
+          </div>
+        )}
 
         {/* DEMO PERSONAS QUICK-SWITCHER */}
         <div className="bg-[#FFF9E6] rounded-3xl p-5 sm:p-6 border-[3.5px] border-[#111111] shadow-[6px_6px_0px_0px_#111111] text-left space-y-3">
@@ -158,7 +259,7 @@ export default function LoginPage() {
                 <div>
                   <div className="flex items-center gap-1.5">
                     <p className="text-xs sm:text-sm font-black text-[#111111]">
-                      Dr. Sarah Lin
+                      Dr. Sarah Lin / Dr. Meera
                     </p>
                     <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#38BDF8] border border-black text-[#111111] font-black">
                       Coordinator Demo
@@ -189,7 +290,7 @@ export default function LoginPage() {
                 <div>
                   <div className="flex items-center gap-1.5">
                     <p className="text-xs sm:text-sm font-black text-[#111111]">
-                      Marcus Vance
+                      Marcus Vance / Admin
                     </p>
                     <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#C084FC] border border-black text-[#111111] font-black">
                       Admin Demo
@@ -207,30 +308,37 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Direct Campus Email Onboarding Card */}
-        <Card className="p-6 text-left bg-[#FFF9E6]">
+        {/* Direct Campus Email Login Card */}
+        <Card className="p-6 text-left bg-[#FFFFFF] border-[2px] border-[#111111] shadow-[6px_6px_0px_#111] rounded-3xl">
           <div className="mb-4 space-y-1">
             <h3 className="text-sm font-black text-[#111111]">
-              Campus Email Sign-In (Preview Mode)
+              Sign In with Campus Credentials
             </h3>
             <p className="text-xs font-semibold text-[#111111]/70">
-              Enter your university email to initialize an active student demo session:
+              Access your registered campus account or student demo:
             </p>
           </div>
+
+          {errors.general && (
+            <div className="mb-4 p-3 bg-red-50 border-[2px] border-red-500 rounded-xl flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <div className="text-xs font-bold text-red-800">{errors.general}</div>
+            </div>
+          )}
 
           <form onSubmit={handleStandardLogin} className="space-y-4" noValidate>
             <div>
               <Input
                 label="University Email"
                 type="email"
-                placeholder="aarav.sharma@campus.edu"
+                placeholder="yourname@campus.edu"
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
                   if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
                 }}
                 leftIcon={<Mail className="w-4 h-4 stroke-[2.5]" />}
-                helperText="Use your student or faculty @campus.edu address"
+                helperText="Registered campus address"
               />
               {errors.email && (
                 <p className="text-[11px] font-bold text-[#DC2626] mt-1 flex items-center gap-1" role="alert">
@@ -241,8 +349,18 @@ export default function LoginPage() {
             </div>
 
             <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-black text-[#111111] uppercase tracking-wide">
+                  Password
+                </label>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs font-bold text-[#111111] hover:text-[#D97706] underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <Input
-                label="Campus Password"
                 type="password"
                 placeholder="••••••••••••"
                 value={password}
@@ -260,26 +378,30 @@ export default function LoginPage() {
               )}
             </div>
 
-            <div className="p-3 bg-[#FFFEF2] rounded-xl border-[2px] border-[#111111] text-[11px] font-bold text-[#111111]/80 space-y-1">
-              <div className="flex items-center gap-1.5 font-black text-[#111111]">
-                <Info className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>Notice on Authentication Integration</span>
-              </div>
-              <p>
-                In this preview build, signing in with campus email initializes the Student profile. Full enterprise SAML/OAuth connects via the production campus directory.
-              </p>
-            </div>
-
             <Button
               type="submit"
               variant="primary"
               size="lg"
               isLoading={isLoading}
-              className="w-full text-sm font-black min-h-[48px]"
+              className="w-full text-sm font-black min-h-[48px] shadow-[4px_4px_0px_#111111]"
             >
               Sign In to Utilix
             </Button>
           </form>
+
+          {/* New to Utilix? Register Link */}
+          <div className="mt-6 pt-5 border-t-[2px] border-[#111111]/10 text-center">
+            <p className="text-xs font-bold text-[#111111]/70">
+              New to Utilix?{" "}
+              <Link
+                href="/register"
+                className="text-[#111111] font-black underline hover:text-[#D97706] inline-flex items-center gap-1"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Register with Campus Email</span>
+              </Link>
+            </p>
+          </div>
         </Card>
 
         {/* Security & Policy Link */}
@@ -297,5 +419,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#FFFDF8] flex items-center justify-center font-bold">Loading Utilix Sign In...</div>}>
+      <LoginContent />
+    </Suspense>
   );
 }

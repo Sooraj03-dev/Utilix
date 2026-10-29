@@ -12,6 +12,7 @@ export interface MockAccount {
 }
 
 export const MOCK_ACCOUNTS: MockAccount[] = [
+  // Base index accounts expected by unit tests
   {
     uid: "mock-student-1",
     email: "student.demo@utilix.local",
@@ -35,6 +36,52 @@ export const MOCK_ACCOUNTS: MockAccount[] = [
     email: "admin.demo@utilix.local",
     password: "demo-admin",
     displayName: "Admin Demo",
+    role: "admin",
+    assignedResourceIds: [],
+    trainingVerified: true,
+  },
+  // Realistic campus demo personas
+  {
+    uid: "student-aarav",
+    email: "aarav.sharma@campus.edu",
+    password: "Password123!",
+    displayName: "Aarav Sharma",
+    role: "student",
+    assignedResourceIds: [],
+    trainingVerified: true,
+  },
+  {
+    uid: "student-diya",
+    email: "diya.nair@campus.edu",
+    password: "Password123!",
+    displayName: "Diya Nair",
+    role: "student",
+    assignedResourceIds: [],
+    trainingVerified: false,
+  },
+  {
+    uid: "student-rohan",
+    email: "rohan.patel@campus.edu",
+    password: "Password123!",
+    displayName: "Rohan Patel",
+    role: "student",
+    assignedResourceIds: [],
+    trainingVerified: true,
+  },
+  {
+    uid: "coord-meera",
+    email: "meera.rao@campus.edu",
+    password: "Password123!",
+    displayName: "Dr. Meera Rao",
+    role: "coordinator",
+    assignedResourceIds: ["res-arduino-kit-a", "res-esp32-board-a", "res-rpi-5-a", "res-prusa-3d-printer"],
+    trainingVerified: true,
+  },
+  {
+    uid: "admin-marcus",
+    email: "marcus.vance@campus.edu",
+    password: "Password123!",
+    displayName: "Marcus Vance",
     role: "admin",
     assignedResourceIds: [],
     trainingVerified: true,
@@ -123,4 +170,3 @@ export function toAuthUser(account: MockAccount): AuthUser {
     source: "mock",
   };
 }
-

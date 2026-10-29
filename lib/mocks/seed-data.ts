@@ -21,11 +21,26 @@ function addHours(hours: number): string {
 function createStudents(): SeedUser[] {
   return Array.from({ length: 12 }).map((_, index) => {
     const num = index + 1;
+    let displayName = `Student ${num.toString().padStart(2, "0")}`;
+    let email = `student${num.toString().padStart(2, "0")}@utilix.local`;
+
+    // Map top 3 students to realistic demo personas
+    if (num === 1) {
+      displayName = "Aarav Sharma";
+      email = "aarav.sharma@campus.edu";
+    } else if (num === 2) {
+      displayName = "Diya Nair";
+      email = "diya.nair@campus.edu";
+    } else if (num === 3) {
+      displayName = "Rohan Patel";
+      email = "rohan.patel@campus.edu";
+    }
+
     return {
       id: `student-${num.toString().padStart(2, "0")}`,
-      email: `student${num.toString().padStart(2, "0")}@utilix.local`,
-      displayName: `Student ${num.toString().padStart(2, "0")}`,
-      role: "student",
+      email,
+      displayName,
+      role: "student" as const,
       department: num % 2 === 0 ? "ECE" : "CSE",
       credits: 20 + (num % 5) * 5,
       trainingVerified: num % 4 !== 0,
@@ -38,8 +53,8 @@ function createCoordinators(): SeedUser[] {
   return [
     {
       id: "coordinator-01",
-      email: "coord-lab@utilix.local",
-      displayName: "Lab Coordinator",
+      email: "meera.rao@campus.edu",
+      displayName: "Dr. Meera Rao",
       role: "coordinator",
       department: "ECE",
       credits: 0,
@@ -82,8 +97,8 @@ function createAdmins(): SeedUser[] {
   return [
     {
       id: "admin-01",
-      email: "admin-platform@utilix.local",
-      displayName: "Platform Admin",
+      email: "marcus.vance@campus.edu",
+      displayName: "Marcus Vance",
       role: "admin",
       department: "Operations",
       credits: 0,
@@ -338,4 +353,3 @@ export function buildSeedDataset(): SeedDataset {
     policies: createPolicies(),
   };
 }
-
