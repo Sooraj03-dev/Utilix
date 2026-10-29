@@ -9,8 +9,16 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
-import { getFirebaseClientAuth, isFirebaseClientConfigured } from "../firebase/client";
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  signOut,
+  type User,
+} from "firebase/auth";
+import { getFirebaseClientAuth, isFirebaseClientConfigured, googleProvider } from "../firebase/client";
 import { isMockAuthEnabled } from "./config";
 import type { AuthUser } from "../types/auth";
 
@@ -19,6 +27,7 @@ interface AuthContextValue {
   loading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: () => Promise<AuthUser | null>;
   logout: () => Promise<void>;
   refreshIdToken: () => Promise<void>;
 }
@@ -133,6 +142,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })();
     });
 
+    if (!isMockAuthEnabled() && auth) {
+      getRedirectResult(auth)
+        .then(async (result) => {
+          if (result?.user && isActive) {
+            await syncFirebaseSession(result.user);
+            const currentUser = await fetchCurrentUser();
+            if (isActive) setUser(currentUser);
+          }
+        })
+        .catch(() => null);
+    }
+
     return () => {
       isActive = false;
       unsubscribe();
@@ -169,6 +190,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(await fetchCurrentUser());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unknown login error.");
+      throw caught;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loginWithGoogle = useCallback(async (): Promise<AuthUser | null> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      if (isMockAuthEnabled()) {
+        const response = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email: "student.demo@utilix.local", password: "demo-student" }),
+        });
+
+        const body = (await response.json()) as { error?: string; user?: AuthUser };
+        if (!response.ok) {
+          throw new Error(body.error ?? "Mock login failed.");
+        }
+        setUser(body.user ?? null);
+        return body.user ?? null;
+      }
+
+      const auth = getFirebaseClientAuth();
+      if (!auth) {
+        throw new Error("Firebase Authentication is not initialized.");
+      }
+
+      let credentials;
+      try {
+        credentials = await signInWithPopup(auth, googleProvider);
+      } catch (popupErr: any) {
+        if (popupErr?.code === "auth/popup-blocked") {
+          await signInWithRedirect(auth, googleProvider);
+          return null;
+        }
+        if (popupErr?.code === "auth/popup-closed-by-user") {
+          throw new Error("Google sign-in popup was closed before completing.");
+        }
+        if (popupErr?.code === "auth/cancelled-popup-request") {
+          throw new Error("Authentication request was cancelled.");
+        }
+        throw popupErr;
+      }
+
+      await syncFirebaseSession(credentials.user);
+      const currentUser = await fetchCurrentUser();
+      setUser(currentUser);
+      return currentUser;
+    } catch (caught) {
+      const msg = caught instanceof Error ? caught.message : "Google sign-in failed.";
+      setError(msg);
       throw caught;
     } finally {
       setLoading(false);
@@ -216,10 +292,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       error,
       login,
+      loginWithGoogle,
       logout,
       refreshIdToken,
     }),
-    [user, loading, error, login, logout, refreshIdToken],
+    [user, loading, error, login, loginWithGoogle, logout, refreshIdToken],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -7,6 +7,7 @@ import {
   connectAuthEmulator,
   browserLocalPersistence,
   setPersistence,
+  GoogleAuthProvider,
   type Auth,
 } from "firebase/auth";
 import {
@@ -96,6 +97,15 @@ if (typeof window !== "undefined") {
 
 export function getFirebaseClientAuth(): Auth | null {
   return auth;
+}
+
+export const googleProvider: GoogleAuthProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: "select_account",
+});
+
+export function getGoogleAuthProvider(): GoogleAuthProvider {
+  return googleProvider;
 }
 
 export { app };

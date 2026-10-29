@@ -57,9 +57,15 @@ The authoritative Firestore collections are:
 
 In the Firebase Console:
 1. Navigate to **Authentication** > **Sign-in method**.
-2. Enable **Email/Password** provider (now enabled).
-3. Ensure authorized domains include `localhost` and your staging domain.
-4. Users logging in are verified directly through Firebase Auth, generating secure session cookies.
+2. **Email/Password Provider**: Ensure it is enabled (for seeded testing accounts).
+3. **Google Provider**:
+   - Click **Add new provider** > Select **Google**.
+   - Toggle **Enable**.
+   - Set the Project public-facing name to **Utilix** and choose your Project support email.
+   - Click **Save**.
+4. **Authorized Domains**:
+   - In **Settings** > **Authorized domains**, confirm that `localhost` is present.
+5. Users logging in with Google or Email/Password are authenticated directly through Firebase Auth, generating secure server-side session cookies (`utilix_session`).
 
 ## 5. Seeded Test Accounts in Firebase Auth & Firestore
 

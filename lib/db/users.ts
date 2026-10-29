@@ -11,6 +11,7 @@ import type { Transaction } from "firebase-admin/firestore";
 import { getFirebaseAdminDb } from "../firebase/admin";
 import { findMockAccountByUid } from "../auth/mock";
 import { isMockAuthEnabled } from "../auth/config";
+import { isoWeekKey } from "./weekKey";
 
 const VALID_ROLES: UserRole[] = ["student", "coordinator", "admin"];
 
@@ -154,5 +155,85 @@ export async function getUserProfileByUid(uid: string): Promise<UserProfile | nu
     trainingVerified: data.trainingVerified === true,
     createdAt: typeof data.createdAt === "string" ? data.createdAt : undefined,
     updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : undefined,
+  };
+}
+
+/**
+ * Ensures a user profile exists in Firestore for an authenticated user.
+ * 1. Checks if profile exists by UID.
+ * 2. If not, checks by email (to link pre-seeded accounts and preserve existing roles/credits).
+ * 3. If completely new, provisions a new Student profile (Strict: never auto-grant coordinator/admin).
+ */
+export async function ensureUserProfile(
+  uid: string,
+  details: { email?: string; displayName?: string }
+): Promise<UserProfile> {
+  const existingByUid = await getUserProfileByUid(uid);
+  if (existingByUid) {
+    return existingByUid;
+  }
+
+  const db = getFirebaseAdminDb();
+  if (!db) {
+    throw new Error("Firebase Admin DB is not configured.");
+  }
+
+  const userDocRef = usersCol().doc(uid);
+
+  // Check if an existing profile exists with this email (e.g. pre-seeded account)
+  if (details.email) {
+    const emailQuery = await usersCol().where("email", "==", details.email).limit(1).get();
+    if (!emailQuery.empty) {
+      const existingDoc = emailQuery.docs[0];
+      const existingData = existingDoc.data();
+      const linkedData = {
+        ...existingData,
+        id: uid,
+        email: details.email,
+        displayName: existingData.displayName || details.displayName || existingData.name || "Utilix User",
+        updatedAt: nowISO(),
+      };
+      await userDocRef.set(linkedData, { merge: true });
+      return {
+        uid,
+        email: details.email,
+        displayName: linkedData.displayName,
+        role: normalizeRole(existingData.role),
+        assignedResourceIds: Array.isArray(existingData.assignedResourceIds) ? existingData.assignedResourceIds : [],
+        trainingVerified: existingData.trainingVerified === true,
+      };
+    }
+  }
+
+  // Provision new default student profile
+  const now = nowISO();
+  const currentWeek = isoWeekKey();
+  const newProfile = {
+    id: uid,
+    role: "student" as UserRole,
+    name: details.displayName || "Utilix Student",
+    displayName: details.displayName || "Utilix Student",
+    email: details.email || "",
+    department_id: "dept_eng",
+    year: 1,
+    credit_balance: 10,
+    free_sessions_used: 0,
+    free_sessions_week: currentWeek,
+    active: true,
+    trainingVerified: false,
+    assignedResourceIds: [],
+    created_at: now,
+  };
+
+  await userDocRef.set(newProfile);
+
+  return {
+    uid,
+    email: newProfile.email,
+    displayName: newProfile.displayName,
+    role: "student",
+    assignedResourceIds: [],
+    trainingVerified: false,
+    createdAt: now,
   };
 }

@@ -1,6 +1,7 @@
 import { getFirebaseAdminAuth } from "../../../../lib/firebase/admin";
 import { getCurrentUser, authErrorToResponse, AuthError } from "../../../../lib/auth/server";
 import { SESSION_COOKIE_NAME } from "../../../../lib/auth/config";
+import { ensureUserProfile } from "../../../../lib/db/users";
 
 interface SessionBody {
   idToken?: string;
@@ -30,8 +31,18 @@ export async function POST(request: Request) {
       throw new AuthError("Firebase Admin SDK is not configured.", 500);
     }
 
-    await auth.verifyIdToken(body.idToken);
-    const response = Response.json({ ok: true });
+    const decoded = await auth.verifyIdToken(body.idToken);
+
+    // Ensure user profile in Firestore
+    const profile = await ensureUserProfile(decoded.uid, {
+      email: decoded.email,
+      displayName: decoded.name,
+    }).catch((err) => {
+      console.warn("Could not provision/ensure Firestore profile:", err);
+      return null;
+    });
+
+    const response = Response.json({ ok: true, user: profile });
     response.headers.append(
       "Set-Cookie",
       `${SESSION_COOKIE_NAME}=${body.idToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600`,
