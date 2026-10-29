@@ -103,6 +103,13 @@ export async function getCurrentUser(
   options?: {
     verifyToken?: VerifyTokenFn;
     now?: number;
+    getUserProfile?: (uid: string) => Promise<{
+      email?: string;
+      displayName?: string;
+      role?: UserRole;
+      assignedResourceIds?: string[];
+      trainingVerified?: boolean;
+    } | null>;
   },
 ): Promise<AuthUser | null> {
   if (canUseMockAuthServer()) {
@@ -123,7 +130,23 @@ export async function getCurrentUser(
   }
 
   const decoded = await verifyFirebaseIdToken(token, options?.verifyToken);
-  const profile = await getUserProfileByUid(decoded.uid);
+  let profile: {
+    email?: string;
+    displayName?: string;
+    role?: UserRole;
+    assignedResourceIds?: string[];
+    trainingVerified?: boolean;
+  } | null = null;
+
+  if (options?.getUserProfile) {
+    profile = await options.getUserProfile(decoded.uid);
+  } else {
+    try {
+      profile = await getUserProfileByUid(decoded.uid);
+    } catch {
+      profile = null;
+    }
+  }
 
   return {
     uid: decoded.uid,
@@ -138,10 +161,7 @@ export async function getCurrentUser(
 
 export async function requireUser(
   request: Request,
-  options?: {
-    verifyToken?: VerifyTokenFn;
-    now?: number;
-  },
+  options?: Parameters<typeof getCurrentUser>[1],
 ): Promise<AuthUser> {
   const user = await getCurrentUser(request, options);
   if (!user) {
@@ -153,10 +173,7 @@ export async function requireUser(
 export async function requireRole(
   request: Request,
   allowedRoles: UserRole[],
-  options?: {
-    verifyToken?: VerifyTokenFn;
-    now?: number;
-  },
+  options?: Parameters<typeof getCurrentUser>[1],
 ): Promise<AuthUser> {
   const user = await requireUser(request, options);
   if (!allowedRoles.includes(user.role)) {

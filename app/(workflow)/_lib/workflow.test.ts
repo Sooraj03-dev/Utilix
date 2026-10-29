@@ -1,5 +1,7 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
+
+process.env.USE_MOCK_DATA = "true";
 
 import { validateBookingForm, timeToMinutes } from "./validation";
 import { MockWorkflowAdapter } from "./workflow-adapter";
