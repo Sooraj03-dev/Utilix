@@ -235,6 +235,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (popupErr?.code === "auth/cancelled-popup-request") {
           throw new Error("Authentication request was cancelled.");
         }
+        if (popupErr?.code === "auth/operation-not-allowed" || popupErr?.message?.includes("operation-not-allowed")) {
+          throw new Error(
+            "Google sign-in is not enabled in Firebase Console for project 'utilix-d7843'. Please enable Google in Firebase Console > Authentication > Sign-in method."
+          );
+        }
+        if (popupErr?.code === "auth/unauthorized-domain") {
+          throw new Error(
+            "This domain is not authorized in Firebase Console. Add 'localhost' to Firebase Console > Authentication > Settings > Authorized domains."
+          );
+        }
         throw popupErr;
       }
 

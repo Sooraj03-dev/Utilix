@@ -18,6 +18,7 @@ import {
   ChevronRight,
   LogOut,
   UserCheck,
+  ExternalLink,
 } from "lucide-react";
 import {
   Button,
@@ -337,17 +338,54 @@ function LoginContent() {
               </div>
             )}
 
-            {/* Error Message Alert */}
+            {/* Error Message Alert & Intelligent Firebase Guidance */}
             {errorMessage && (
-              <div
-                className="p-3.5 rounded-2xl bg-rose-50 border-[2.5px] border-[#DC2626] text-[#DC2626] text-xs font-bold flex items-start gap-2.5 shadow-[2px_2px_0px_#DC2626]"
-                role="alert"
-              >
-                <AlertCircle className="w-4 h-4 stroke-[2.5] shrink-0 mt-0.5" />
-                <div className="flex-1 leading-relaxed">
-                  <span className="font-black">Authentication Error:</span> {errorMessage}
+              (errorMessage.toLowerCase().includes("operation-not-allowed") ||
+               errorMessage.toLowerCase().includes("google sign-in is not enabled") ||
+               errorMessage.toLowerCase().includes("google provider is not enabled")) ? (
+                <div className="p-4 rounded-2xl bg-amber-50 border-[2.5px] border-amber-600 shadow-[3px_3px_0px_#D97706] text-xs text-amber-950 space-y-3">
+                  <div className="flex items-center gap-2 font-black text-amber-900 text-xs">
+                    <AlertCircle className="w-4 h-4 text-amber-700 stroke-[2.5] shrink-0" />
+                    <span>Google Provider Needs 1-Minute Activation in Firebase Console</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-amber-900/90 font-medium">
+                    Firebase Authentication rejected Google sign-in because the Google provider is currently disabled in your Firebase project (<strong>utilix-d7843</strong>).
+                  </p>
+                  <ol className="list-decimal list-inside text-[11px] space-y-1 font-semibold text-amber-900 bg-white/70 p-3 rounded-xl border border-amber-200">
+                    <li>Open Firebase Console &rarr; <strong>Authentication</strong> &rarr; <strong>Sign-in method</strong>.</li>
+                    <li>Click <strong>Add new provider</strong> &rarr; Select <strong>Google</strong>.</li>
+                    <li>Toggle <strong>Enable</strong>, choose your support email, and click <strong>Save</strong>.</li>
+                  </ol>
+                  <div className="pt-1 flex flex-col sm:flex-row gap-2">
+                    <a
+                      href="https://console.firebase.google.com/project/utilix-d7843/authentication/providers"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-black text-xs text-center border-[2px] border-black shadow-[2px_2px_0px_#111] transition flex items-center justify-center gap-1.5"
+                    >
+                      <span>Open Firebase Console</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab("demo"); setErrorMessage(null); }}
+                      className="px-3 py-1.5 rounded-xl bg-white hover:bg-amber-100 text-amber-900 font-bold text-xs text-center border border-amber-300 transition"
+                    >
+                      Use Demo Accounts in meantime &rarr;
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div
+                  className="p-3.5 rounded-2xl bg-rose-50 border-[2.5px] border-[#DC2626] text-[#DC2626] text-xs font-bold flex items-start gap-2.5 shadow-[2px_2px_0px_#DC2626]"
+                  role="alert"
+                >
+                  <AlertCircle className="w-4 h-4 stroke-[2.5] shrink-0 mt-0.5" />
+                  <div className="flex-1 leading-relaxed">
+                    <span className="font-black">Authentication Error:</span> {errorMessage}
+                  </div>
+                </div>
+              )
             )}
 
             {/* Navigation Tabs between Google, Campus Email, and Demo */}
