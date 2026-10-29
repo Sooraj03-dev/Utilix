@@ -1,4 +1,4 @@
-// Utilix — ISO week key and weekly reset logic (server-only)
+// Utilix — ISO week key, weekly reset and free-sessions-left logic (server-only)
 // Owner: A
 import "server-only";
 
@@ -59,4 +59,18 @@ export function evaluateWeeklySessions(
     free_sessions_week: user.free_sessions_week,
     isStale: false,
   };
+}
+
+/**
+ * Free sessions left this week for the policy's allowance.
+ * Uses the ISO week reset: a stale week counter contributes 0 used sessions.
+ * Never returns a negative number.
+ */
+export function freeSessionsLeft(
+  user: Pick<User, "free_sessions_used" | "free_sessions_week">,
+  policy: { free_sessions_per_week: number },
+  date: Date = new Date()
+): number {
+  const evaluated = evaluateWeeklySessions(user, date);
+  return Math.max(0, policy.free_sessions_per_week - evaluated.free_sessions_used);
 }

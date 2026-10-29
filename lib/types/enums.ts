@@ -66,6 +66,9 @@ export type NotificationType =
   | "credit_granted"
   | "general";
 
+/** Training request lifecycle status */
+export type TrainingRequestStatus = "pending" | "scheduled" | "completed" | "declined";
+
 /** AI decision source */
 export type DecisionSource = "ai" | "fallback" | null;
 
@@ -89,7 +92,9 @@ export type AuditAction =
   | "approval_decided"
   | "checkout"
   | "return"
-  | "issue_reported"
+  |  "issue_reported"
+  | "training_requested"
+  | "training_request_status_changed"
   | "slot_locked"
   | "slot_released";
 

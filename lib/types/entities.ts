@@ -14,6 +14,7 @@ import type {
   CreditReason,
   IssueStatus,
   IssueCategory,
+  TrainingRequestStatus,
   NotificationType,
   DecisionSource,
   TiebreakMethod,
@@ -180,6 +181,15 @@ export interface IssueReport {
   notes: string;
   photo_url: string | null;
   status: IssueStatus;
+  created_at: string;
+}
+
+// ─── training_requests ───
+export interface TrainingRequest {
+  id: string;
+  user_id: string;
+  training_type: string;
+  status: TrainingRequestStatus;
   created_at: string;
 }
 

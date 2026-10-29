@@ -112,6 +112,38 @@ export async function updateBookingStatus(
   }
 }
 
+/**
+ * Paginated past bookings (slot_start in the past), newest first.
+ * 20 per page with cursor pagination; returns a next cursor when more exist.
+ */
+export async function listPastBookingsPage(
+  userId: string,
+  pageSize = 20,
+  cursorId?: string | null
+): Promise<{ items: Booking[]; nextCursor: string | null }> {
+  let query = bookingsCol()
+    .where("user_id", "==", userId)
+    .where("slot_start", "<", nowTimestamp())
+    .orderBy("slot_start", "desc")
+    .limit(pageSize + 1);
+
+  if (cursorId) {
+    const cursorSnap = await bookingsCol().doc(cursorId).get();
+    if (!cursorSnap.exists) return { items: [], nextCursor: null };
+    query = query.startAfter(cursorSnap);
+  }
+
+  const snap = await query.get();
+  const items = snap.docs
+    .slice(0, pageSize)
+    .map((d) => docToEntity<Booking>(d.id, d.data()))
+    .filter((b): b is Booking => b !== null);
+
+  const nextCursor =
+    snap.docs.length > pageSize ? snap.docs[pageSize - 1].id : null;
+  return { items, nextCursor };
+}
+
 const COUNTED_SESSION_STATUSES: Set<BookingStatus> = new Set([
   "confirmed",
   "checked_out",

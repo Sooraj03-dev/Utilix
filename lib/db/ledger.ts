@@ -153,6 +153,37 @@ export async function applyCredit(
 }
 
 /**
+ * Paginated credit ledger rows for a user, newest first (20 per page).
+ * Doc IDs double as cursors for startAfter.
+ */
+export async function listLedgerPage(
+  userId: string,
+  pageSize = 20,
+  cursorId?: string | null
+): Promise<{ items: CreditLedgerEntry[]; nextCursor: string | null }> {
+  let query = creditLedgerCol()
+    .where("user_id", "==", userId)
+    .orderBy("created_at", "desc")
+    .limit(pageSize + 1);
+
+  if (cursorId) {
+    const cursorSnap = await creditLedgerCol().doc(cursorId).get();
+    if (!cursorSnap.exists) return { items: [], nextCursor: null };
+    query = query.startAfter(cursorSnap);
+  }
+
+  const snap = await query.get();
+  const items = snap.docs
+    .slice(0, pageSize)
+    .map((d) => docToEntity<CreditLedgerEntry>(d.id, d.data()))
+    .filter((e): e is CreditLedgerEntry => e !== null);
+
+  const nextCursor =
+    snap.docs.length > pageSize ? snap.docs[pageSize - 1].id : null;
+  return { items, nextCursor };
+}
+
+/**
  * Grants monthly credits to a user according to the active or supplied policy.
  * Idempotent per user per calendar month: key = `grant_${userId}_${YYYY-MM}`.
  */

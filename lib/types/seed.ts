@@ -78,6 +78,14 @@ export interface SeedMaintenanceRecord {
   note: string;
 }
 
+export interface SeedTrainingRequest {
+  id: string;
+  user_id: string;
+  training_type: string;
+  status: "pending";
+  created_at: string;
+}
+
 export interface SeedNotification {
   id: string;
   userId: string;
@@ -115,6 +123,7 @@ export interface SeedDataset {
   availabilitySlots: SeedAvailabilitySlot[];
   maintenanceRecords: SeedMaintenanceRecord[];
   notifications: SeedNotification[];
+  trainingRequests: SeedTrainingRequest[];
   auditLogs: SeedAuditLog[];
   policies: SeedPolicyConfig[];
 }

@@ -97,8 +97,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (!isFirebaseClientConfigured()) {
-      setError("Firebase client credentials are missing. Set NEXT_PUBLIC_FIREBASE_* env values.");
-      setLoading(false);
+      void (async () => {
+        setError("Firebase client credentials are missing. Set NEXT_PUBLIC_FIREBASE_* env values.");
+        setLoading(false);
+      })();
       return () => {
         isActive = false;
       };
@@ -106,8 +108,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const auth = getFirebaseClientAuth();
     if (!auth) {
-      setError("Could not initialize Firebase Auth.");
-      setLoading(false);
+      void (async () => {
+        setError("Could not initialize Firebase Auth.");
+        setLoading(false);
+      })();
       return () => {
         isActive = false;
       };
@@ -224,28 +228,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let credentials;
       try {
         credentials = await signInWithPopup(auth, googleProvider);
-      } catch (popupErr: any) {
-        if (popupErr?.code === "auth/popup-blocked") {
+      } catch (popupErr: unknown) {
+        const code = (popupErr as { code?: string } | null)?.code;
+        const message = popupErr instanceof Error ? popupErr.message : "";
+        if (code === "auth/popup-blocked") {
           await signInWithRedirect(auth, googleProvider);
           return null;
         }
-        if (popupErr?.code === "auth/popup-closed-by-user") {
+        if (code === "auth/popup-closed-by-user") {
           throw new Error("Google sign-in popup was closed before completing.");
         }
-        if (popupErr?.code === "auth/cancelled-popup-request") {
+        if (code === "auth/cancelled-popup-request") {
           throw new Error("Authentication request was cancelled.");
         }
-        if (popupErr?.code === "auth/operation-not-allowed" || popupErr?.message?.includes("operation-not-allowed")) {
+        if (code === "auth/operation-not-allowed" || message.includes("operation-not-allowed")) {
           throw new Error(
             "Google sign-in is not enabled in Firebase Console for project 'utilix-d7843'. Please enable Google in Firebase Console > Authentication > Sign-in method."
           );
         }
-        if (popupErr?.code === "auth/unauthorized-domain") {
+        if (code === "auth/unauthorized-domain") {
           throw new Error(
             "This domain is not authorized in Firebase Console. Add 'localhost' to Firebase Console > Authentication > Settings > Authorized domains."
           );
         }
-        throw popupErr;
+        throw popupErr as Error;
       }
 
       await syncFirebaseSession(credentials.user);
