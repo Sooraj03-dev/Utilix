@@ -5,7 +5,6 @@
 import type {
   Booking,
   Resource,
-  PolicyWeights,
   TiebreakInfo,
   WaitlistEntry,
 } from "./entities";
@@ -123,4 +122,3 @@ export interface ApiResponse<T> {
   data?: T;
   error?: ApiError;
 }
-

@@ -1,0 +1,140 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper Functions ───
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return request.auth.token.role;
+    }
+
+    function isStaff() {
+      return isSignedIn() && (role() == 'coordinator' || role() == 'admin');
+    }
+
+    function isAdmin() {
+      return isSignedIn() && role() == 'admin';
+    }
+
+    function isBookingOwner(bookingId) {
+      let booking = get(/databases/$(database)/documents/bookings/$(bookingId)).data;
+      return request.auth.uid == booking.user_id ||
+        (booking.member_ids is list && request.auth.uid in booking.member_ids);
+    }
+
+    // ─── Default: Deny all writes from client SDK ───
+    // All writes go through server route handlers / Server Actions via firebase-admin.
+    match /{document=**} {
+      allow write: if false;
+    }
+
+    // ─── Collection Rules ───
+
+    // users: read their own doc, staff read all users
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isStaff());
+    }
+
+    // resources, departments, availability_windows, policies: readable by any signed-in user
+    match /departments/{deptId} {
+      allow read: if isSignedIn();
+    }
+
+    match /resources/{resourceId} {
+      allow read: if isSignedIn();
+    }
+
+    match /availability_windows/{windowId} {
+      allow read: if isSignedIn();
+    }
+
+    match /policies/{policyId} {
+      allow read: if isSignedIn();
+    }
+
+    // bookings: readable by primary requester (user_id), team members (member_ids), or staff
+    match /bookings/{bookingId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.user_id ||
+        (resource.data.member_ids is list && request.auth.uid in resource.data.member_ids) ||
+        isStaff()
+      );
+    }
+
+    // bundles: readable by owner or staff
+    match /bundles/{bundleId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.user_id ||
+        isStaff()
+      );
+    }
+
+    // waitlist, notifications, credit_ledger, issue_reports: readable by owner or staff
+    match /waitlist/{entryId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.user_id ||
+        isStaff()
+      );
+    }
+
+    match /notifications/{notifId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.user_id ||
+        isStaff()
+      );
+    }
+
+    match /credit_ledger/{entryId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.user_id ||
+        isStaff()
+      );
+    }
+
+    match /issue_reports/{reportId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.user_id ||
+        isStaff()
+      );
+    }
+
+    // approvals and checkouts: readable by staff and the booking owner
+    match /approvals/{approvalId} {
+      allow read: if isStaff() || (
+        isSignedIn() && resource.data.booking_id != null && isBookingOwner(resource.data.booking_id)
+      );
+    }
+
+    match /checkouts/{checkoutId} {
+      allow read: if isStaff() || (
+        isSignedIn() && (
+          request.auth.uid == resource.data.checked_out_by ||
+          (resource.data.booking_id != null && isBookingOwner(resource.data.booking_id))
+        )
+      );
+    }
+
+    // audit_log: readable by admin only
+    match /audit_log/{logId} {
+      allow read: if isAdmin();
+    }
+
+    // slot_locks: readable by staff only
+    match /slot_locks/{slotId} {
+      allow read: if isStaff();
+    }
+
+    // training_certifications: readable by the owner and staff
+    match /training_certifications/{certId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.user_id ||
+        isStaff()
+      );
+    }
+  }
+}
