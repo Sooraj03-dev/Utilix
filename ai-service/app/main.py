@@ -2,7 +2,7 @@
 from fastapi import FastAPI, Header, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.routers import allocate, alternatives, bundle, insights
+from app.routers import allocate, alternatives, bundle, condition, forecast, insights, simulate
 from app.schemas import HealthResponse
 
 def create_app() -> FastAPI:
@@ -66,6 +66,9 @@ def create_app() -> FastAPI:
     app.include_router(alternatives.router, tags=["Alternatives"])
     app.include_router(bundle.router, tags=["Bundle"])
     app.include_router(insights.router, tags=["Insights"])
+    app.include_router(condition.router, tags=["Condition"])
+    app.include_router(forecast.router, tags=["Forecast"])
+    app.include_router(simulate.router, tags=["Simulate"])
 
     return app
 
