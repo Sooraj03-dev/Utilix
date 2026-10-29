@@ -98,6 +98,10 @@ export type {
   AIInsightsResponse,
 } from "./ai";
 
+// Auth and seeding contracts
+export * from "./auth";
+export * from "./seed";
+
 // ─── Firestore collection names (single source of truth) ───
 export const COLLECTIONS = {
   users: "users",
