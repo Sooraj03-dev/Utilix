@@ -7,8 +7,22 @@ param(
 
     [int]$Port = 3000,
 
-    [int]$AiPort = 8000
+    [int]$AiPort = 8000,
+
+    [switch]$Help = $false
 )
+
+if ($Help) {
+    Write-Host "Utilix Startup Script Usage:" -ForegroundColor Cyan
+    Write-Host "  .\start.ps1 [-Mode <demo|cloud>] [-SkipAi] [-Port <3000>] [-AiPort <8000>]"
+    Write-Host "Parameters:"
+    Write-Host "  -Mode demo   : (Default) Zero-config mode using local mock auth and simulated data."
+    Write-Host "  -Mode cloud  : Connects to live Google Firebase Authentication and Firestore using .env.local."
+    Write-Host "  -SkipAi      : Launches only the Next.js frontend, skipping the Python FastAPI service."
+    Write-Host "  -Port        : Custom port for Next.js (default: 3000)."
+    Write-Host "  -AiPort      : Custom port for Python AI Service (default: 8000)."
+    return
+}
 
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
