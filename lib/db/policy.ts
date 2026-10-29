@@ -4,9 +4,8 @@ import "server-only";
 
 import { adminDb } from "@/lib/firebase/admin";
 import { policiesCol } from "./collections";
-import { nowTimestamp, toISO } from "./converters";
+import { nowTimestamp, toISO, type TimestampLike } from "./converters";
 import { DEFAULT_POLICY, type Policy } from "@/lib/types";
-import type { Timestamp } from "firebase-admin/firestore";
 
 /**
  * Retrieves the currently active policy from Firestore.
@@ -42,7 +41,7 @@ export async function getActivePolicy(): Promise<Policy> {
     deadline_window_days:
       data.deadline_window_days ?? DEFAULT_POLICY.deadline_window_days,
     created_by: data.created_by ?? "system",
-    created_at: toISO(data.created_at as Timestamp) ?? DEFAULT_POLICY.created_at,
+    created_at: toISO(data.created_at as TimestampLike) ?? DEFAULT_POLICY.created_at,
   };
 }
 
