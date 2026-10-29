@@ -8,6 +8,7 @@ import type {
   SeedAvailabilitySlot,
   SeedMaintenanceRecord,
   SeedNotification,
+  SeedTrainingRequest,
   SeedAuditLog,
   SeedPolicyConfig,
 } from "../types/seed";
@@ -258,6 +259,32 @@ function createMaintenance(): SeedMaintenanceRecord[] {
   ];
 }
 
+function createTrainingRequests(): SeedTrainingRequest[] {
+  return [
+    {
+      id: "training-request-student-02-3d-printer",
+      user_id: "student-02",
+      training_type: "3d-printer",
+      status: "pending",
+      created_at: addHours(-26),
+    },
+    {
+      id: "training-request-student-05-recording",
+      user_id: "student-05",
+      training_type: "recording",
+      status: "pending",
+      created_at: addHours(-12),
+    },
+    {
+      id: "training-request-student-07-dslr",
+      user_id: "student-07",
+      training_type: "dslr",
+      status: "pending",
+      created_at: addHours(-5),
+    },
+  ];
+}
+
 function createNotifications(): SeedNotification[] {
   return [
     {
@@ -334,6 +361,7 @@ export function buildSeedDataset(): SeedDataset {
     availabilitySlots: createAvailabilitySlots(),
     maintenanceRecords: createMaintenance(),
     notifications: createNotifications(),
+    trainingRequests: createTrainingRequests(),
     auditLogs: createAuditLogs(),
     policies: createPolicies(),
   };

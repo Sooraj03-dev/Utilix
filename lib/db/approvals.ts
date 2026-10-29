@@ -1,7 +1,7 @@
 // Utilix — approval records database helpers (server-only)
 import "server-only";
 
-import { approvalsCol, bookingsCol } from "./collections";
+import { approvalsCol } from "./collections";
 import { docToEntity, nowISO, nowTimestamp } from "./converters";
 import type { Approval, ApprovalDecision } from "@/lib/types";
 import type { Transaction } from "firebase-admin/firestore";

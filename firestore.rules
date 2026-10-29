@@ -136,5 +136,14 @@ service cloud.firestore {
         isStaff()
       );
     }
+
+    // training_requests: readable by the requesting student and staff;
+    // writes stay server-only (the deny-all write rule above applies).
+    match /training_requests/{requestId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.user_id ||
+        isStaff()
+      );
+    }
   }
 }

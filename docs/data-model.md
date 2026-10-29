@@ -138,6 +138,31 @@ Doc ID = `${userId}_${trainingType}`
 }
 ```
 
+### `training_requests`
+
+A student asks for a training they do not hold yet. `training_type` matches the
+`requires_training` value on resources. Statuses: `pending`, `scheduled`,
+`completed`, `declined` (only `pending` is produced by the student action).
+Duplicate pending requests per (user, training_type) are blocked in a transaction.
+
+| Field | Type | Example |
+|---|---|---|
+| user_id | string | `"user_bob"` |
+| training_type | string | `"3d-printer"` |
+| status | string | `"pending"` |
+| created_at | Timestamp | `"2026-10-28T14:20:00Z"` |
+
+```json
+{
+  "user_id": "user_bob",
+  "training_type": "3d-printer",
+  "status": "pending",
+  "created_at": "2026-10-28T14:20:00Z"
+}
+```
+
+Indexes: `user_id + status + created_at desc`, `training_type + status + created_at desc`.
+
 ### `bookings`
 
 | Field | Type | Example |
@@ -527,6 +552,7 @@ stateDiagram-v2
 | resources | Any signed-in | firebase-admin | A (helpers), B (workflow) |
 | availability_windows | Any signed-in | firebase-admin | A (helpers) |
 | training_certifications | Own + staff | firebase-admin | A (helpers) |
+| training_requests | Own + staff | firebase-admin | A (training action), target Part 5 (decisions) |
 | bookings | Own (user_id or member_ids) + staff | firebase-admin | B (workflow), AI (scores via B) |
 | bundles | Own + staff | firebase-admin | B (workflow) |
 | waitlist | Own + staff | firebase-admin | B (workflow) |

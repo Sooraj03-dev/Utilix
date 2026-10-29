@@ -4,9 +4,14 @@ import { buildSeedDataset } from "../lib/mocks/seed-data";
 import { getFirebaseAdminAuth, getFirebaseAdminDb } from "../lib/firebase/admin";
 import { COLLECTIONS, DEFAULT_POLICY, type ResourceType } from "../lib/types";
 
+interface NodeWithLoadEnvFile {
+  loadEnvFile?: (path?: string) => void;
+}
+
 try {
-  if (typeof (process as any).loadEnvFile === "function") {
-    (process as any).loadEnvFile(".env.local");
+  const proc = process as unknown as NodeWithLoadEnvFile;
+  if (typeof proc.loadEnvFile === "function") {
+    proc.loadEnvFile(".env.local");
   }
 } catch {
   // .env.local not found or already loaded
@@ -214,6 +219,18 @@ async function upsertFirebaseData(target: SeedTarget): Promise<void> {
       created_at: tx.timestamp || nowISO,
     };
     await db.collection(COLLECTIONS.credit_ledger).doc(tx.id).set(ledgerData, { merge: true });
+  }
+
+  // 7b. Seed Training Requests (for the coordinator training page)
+  for (const req of dataset.trainingRequests) {
+    const requestData = {
+      id: req.id,
+      user_id: req.user_id,
+      training_type: req.training_type,
+      status: req.status,
+      created_at: req.created_at,
+    };
+    await db.collection(COLLECTIONS.training_requests).doc(req.id).set(requestData, { merge: true });
   }
 
   // 8. Seed Notifications

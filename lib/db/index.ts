@@ -16,6 +16,7 @@ export * from "./waitlist";
 export * from "./notifications";
 export * from "./users";
 export * from "./training";
+export * from "./training-requests";
 export * from "./audit";
 export * from "./ledger";
 export * from "./errors";
