@@ -1,4 +1,4 @@
-import { type ZodSchema } from "zod";
+import { type z } from "zod";
 import type { Meta } from "./types.js";
 
 export const MAX_BODY_BYTES = 200 * 1024; // 200 KB
@@ -47,10 +47,10 @@ export function buildErrorEnvelope(
   };
 }
 
-export async function parseJsonRequest<T>(
+export async function parseJsonRequest<Output, Input = unknown>(
   request: Request,
-  schema: ZodSchema<T>
-): Promise<{ success: true; data: T; latencyStart: number } | { success: false; response: Response }> {
+  schema: z.ZodType<Output, z.ZodTypeDef, Input>
+): Promise<{ success: true; data: Output; latencyStart: number } | { success: false; response: Response }> {
   const latencyStart = Date.now();
   try {
     const rawText = await request.text();

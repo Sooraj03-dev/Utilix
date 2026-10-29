@@ -1,1 +1,57 @@
-{}
+{
+  "teamId": "team-robotics-alpha",
+  "creditsAvailable": 15,
+  "wantedResources": [
+    {
+      "resourceId": "res-printer-3d",
+      "resourceName": "Prusa 3D Printer",
+      "resourceType": "3d-printer",
+      "candidateWindows": [
+        {
+          "slotId": "slot-pr-1",
+          "startsAt": "2026-11-04T10:00:00Z",
+          "endsAt": "2026-11-04T12:00:00Z",
+          "creditCost": 0
+        },
+        {
+          "slotId": "slot-pr-2",
+          "startsAt": "2026-11-04T14:00:00Z",
+          "endsAt": "2026-11-04T16:00:00Z",
+          "creditCost": 0
+        }
+      ]
+    },
+    {
+      "resourceId": "res-arduino-kit",
+      "resourceName": "Arduino Starter Kit",
+      "resourceType": "electronics",
+      "candidateWindows": [
+        {
+          "slotId": "slot-ard-1",
+          "startsAt": "2026-11-04T10:00:00Z",
+          "endsAt": "2026-11-04T12:00:00Z",
+          "creditCost": 0
+        }
+      ]
+    },
+    {
+      "resourceId": "res-dslr-camera",
+      "resourceName": "Sony Alpha DSLR Camera",
+      "resourceType": "camera",
+      "candidateWindows": []
+    },
+    {
+      "resourceId": "res-studio-room",
+      "resourceName": "Project Room Studio",
+      "resourceType": "space",
+      "candidateWindows": [
+        {
+          "slotId": "slot-st-1",
+          "startsAt": "2026-11-04T10:00:00Z",
+          "endsAt": "2026-11-04T12:00:00Z",
+          "creditCost": 2
+        }
+      ]
+    }
+  ]
+}

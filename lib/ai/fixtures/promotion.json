@@ -1,1 +1,69 @@
-{}
+{
+  "slot": {
+    "id": "slot-studio-cancelled",
+    "resourceId": "res-recording-studio",
+    "resourceName": "Audio Recording Studio",
+    "resourceType": "studio",
+    "startsAt": "2026-11-03T16:00:00Z",
+    "endsAt": "2026-11-03T18:00:00Z",
+    "slotType": "free",
+    "creditCost": 0,
+    "capacity": 1,
+    "restricted": true
+  },
+  "mode": "promotion",
+  "seed": "promotion-slot-seed-99",
+  "requests": [
+    {
+      "requestId": "req-waitlist-1",
+      "requestedAt": "2026-10-28T10:00:00Z",
+      "sessionsLast30d": 6,
+      "sessionsThisMonth": 4,
+      "waitingHours": 24,
+      "deadlineDays": null,
+      "departmentsInTeam": 1,
+      "creditsAvailable": 10,
+      "freeSessionsLeft": 2,
+      "constraints": {
+        "trainingOk": true,
+        "withinBookingLimit": true,
+        "resourceAvailable": true,
+        "noOverlap": true
+      }
+    },
+    {
+      "requestId": "req-waitlist-2",
+      "requestedAt": "2026-10-28T14:00:00Z",
+      "sessionsLast30d": 1,
+      "sessionsThisMonth": 0,
+      "waitingHours": 20,
+      "deadlineDays": 2,
+      "departmentsInTeam": 2,
+      "creditsAvailable": 10,
+      "freeSessionsLeft": 2,
+      "constraints": {
+        "trainingOk": true,
+        "withinBookingLimit": true,
+        "resourceAvailable": true,
+        "noOverlap": true
+      }
+    },
+    {
+      "requestId": "req-waitlist-3",
+      "requestedAt": "2026-10-28T16:00:00Z",
+      "sessionsLast30d": 3,
+      "sessionsThisMonth": 2,
+      "waitingHours": 18,
+      "deadlineDays": 5,
+      "departmentsInTeam": 1,
+      "creditsAvailable": 10,
+      "freeSessionsLeft": 2,
+      "constraints": {
+        "trainingOk": true,
+        "withinBookingLimit": true,
+        "resourceAvailable": true,
+        "noOverlap": true
+      }
+    }
+  ]
+}

@@ -1,2 +1,20 @@
-// TODO: Implement
-export {};
+// Core public exports of the AI/ML module
+export * from "./types.js";
+export * from "./policy.js";
+export * from "./constraints.js";
+export * from "./scoring.js";
+export * from "./tiebreak.js";
+export * from "./allocate.js";
+export * from "./templates.js";
+export * from "./llm.js";
+export * from "./explain.js";
+export * from "./envelope.js";
+export * from "./counterfactual.js";
+export * from "./alternatives.js";
+export * from "./bundle.js";
+export * from "./metrics.js";
+export * from "./insights.js";
+export * from "./simulate.js";
+export * from "./condition.js";
+export * from "./forecast.js";
+export * from "./anomalies.js";

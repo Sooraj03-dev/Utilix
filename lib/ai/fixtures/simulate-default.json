@@ -1,1 +1,8 @@
-{}
+{
+  "students": 50,
+  "resources": 6,
+  "days": 14,
+  "slotsPerResourcePerDay": 4,
+  "aggressiveShare": 0.2,
+  "seed": "campus-share-hackathon-2026"
+}

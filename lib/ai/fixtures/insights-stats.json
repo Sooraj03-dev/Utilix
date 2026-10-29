@@ -1,1 +1,62 @@
-{}
+{
+  "resourceStats": [
+    {
+      "resourceId": "res-printer-a",
+      "name": "3D Printer A",
+      "department": "Mechanical Eng",
+      "totalSlots": 20,
+      "bookedSlots": 19,
+      "requests": 25,
+      "waitlistLength": 6,
+      "avgWaitHours": 36.5
+    },
+    {
+      "resourceId": "res-arduino-b",
+      "name": "Arduino Kit B",
+      "department": "Electrical Eng",
+      "totalSlots": 25,
+      "bookedSlots": 3,
+      "requests": 3,
+      "waitlistLength": 0,
+      "avgWaitHours": 0.0
+    },
+    {
+      "resourceId": "res-dslr-studio",
+      "name": "Sony FX3 Camera Kit",
+      "department": "Design & Media",
+      "totalSlots": 15,
+      "bookedSlots": 14,
+      "requests": 18,
+      "waitlistLength": 4,
+      "avgWaitHours": 18.2
+    },
+    {
+      "resourceId": "res-vr-lab",
+      "name": "Meta Quest 3 Lab",
+      "department": "Computer Science",
+      "totalSlots": 30,
+      "bookedSlots": 15,
+      "requests": 17,
+      "waitlistLength": 2,
+      "avgWaitHours": 6.0
+    }
+  ],
+  "studentSessions": {
+    "student-001": 8,
+    "student-002": 7,
+    "student-003": 5,
+    "student-004": 2,
+    "student-005": 2,
+    "student-006": 1,
+    "student-007": 1,
+    "student-008": 0,
+    "student-009": 0,
+    "student-010": 0
+  },
+  "departmentSessions": {
+    "Mechanical Eng": 22,
+    "Design & Media": 15,
+    "Computer Science": 14,
+    "Electrical Eng": 3
+  }
+}

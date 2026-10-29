@@ -1,1 +1,70 @@
-{}
+{
+  "freeSlotScenario": {
+    "slot": {
+      "id": "slot-free-001",
+      "resourceId": "res-laser-cutter",
+      "resourceName": "Laser Cutter",
+      "resourceType": "laser-cutter",
+      "startsAt": "2026-11-02T09:00:00Z",
+      "endsAt": "2026-11-02T10:00:00Z",
+      "slotType": "free",
+      "creditCost": 0,
+      "capacity": 1,
+      "restricted": false
+    },
+    "mode": "new_requests",
+    "requests": [
+      {
+        "requestId": "req-free-student",
+        "requestedAt": "2026-10-29T08:00:00Z",
+        "sessionsLast30d": 1,
+        "sessionsThisMonth": 1,
+        "waitingHours": 4,
+        "deadlineDays": null,
+        "departmentsInTeam": 1,
+        "creditsAvailable": 0,
+        "freeSessionsLeft": 1,
+        "constraints": {
+          "trainingOk": true,
+          "withinBookingLimit": true,
+          "resourceAvailable": true,
+          "noOverlap": true
+        }
+      }
+    ]
+  },
+  "creditSlotScenario": {
+    "slot": {
+      "id": "slot-credit-peak-001",
+      "resourceId": "res-laser-cutter",
+      "resourceName": "Laser Cutter",
+      "resourceType": "laser-cutter",
+      "startsAt": "2026-11-02T14:00:00Z",
+      "endsAt": "2026-11-02T15:00:00Z",
+      "slotType": "credit",
+      "creditCost": 3,
+      "capacity": 1,
+      "restricted": false
+    },
+    "mode": "new_requests",
+    "requests": [
+      {
+        "requestId": "req-broke-student",
+        "requestedAt": "2026-10-29T08:00:00Z",
+        "sessionsLast30d": 1,
+        "sessionsThisMonth": 1,
+        "waitingHours": 4,
+        "deadlineDays": null,
+        "departmentsInTeam": 1,
+        "creditsAvailable": 0,
+        "freeSessionsLeft": 0,
+        "constraints": {
+          "trainingOk": true,
+          "withinBookingLimit": true,
+          "resourceAvailable": true,
+          "noOverlap": true
+        }
+      }
+    ]
+  }
+}
