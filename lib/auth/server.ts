@@ -1,4 +1,5 @@
-import { getUserProfileByUid } from "../db/users";
+import { getUserById } from "../db/users";
+import type { User } from "../types";
 import { getFirebaseAdminAuth } from "../firebase/admin";
 import { MOCK_SESSION_COOKIE_NAME, SESSION_COOKIE_NAME, canUseMockAuthServer } from "./config";
 import { findMockAccountByUid, parseMockSession, toAuthUser, type MockAuthError } from "./mock";
@@ -123,12 +124,14 @@ export async function getCurrentUser(
   }
 
   const decoded = await verifyFirebaseIdToken(token, options?.verifyToken);
-  const profile = await getUserProfileByUid(decoded.uid);
+  const profile = (await getUserById(decoded.uid)) as
+    | (User & { displayName?: string; assignedResourceIds?: string[]; trainingVerified?: boolean })
+    | null;
 
   return {
     uid: decoded.uid,
     email: profile?.email || decoded.email || "",
-    displayName: profile?.displayName || decoded.name || "Unknown user",
+    displayName: profile?.displayName || profile?.name || decoded.name || "Unknown user",
     role: profile?.role ?? "student",
     assignedResourceIds: profile?.assignedResourceIds ?? [],
     trainingVerified: profile?.trainingVerified ?? false,

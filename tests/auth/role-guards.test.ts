@@ -60,10 +60,10 @@ describe("auth server guards", () => {
   it("rejects mock mode in production", () => {
     const oldMode = process.env.NODE_ENV;
     const oldMock = process.env.NEXT_PUBLIC_USE_MOCK_AUTH;
-    process.env.NODE_ENV = "production";
+    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
     process.env.NEXT_PUBLIC_USE_MOCK_AUTH = "true";
     expect(() => assertMockAuthAllowed()).toThrow();
-    process.env.NODE_ENV = oldMode;
+    (process.env as Record<string, string | undefined>).NODE_ENV = oldMode;
     process.env.NEXT_PUBLIC_USE_MOCK_AUTH = oldMock;
   });
 });

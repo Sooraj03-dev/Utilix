@@ -40,3 +40,22 @@ if (process.env.NEXT_PUBLIC_USE_EMULATORS === "true") {
 }
 
 export { app };
+
+export function isFirebaseClientConfigured(): boolean {
+  return Boolean(
+    process.env.NEXT_PUBLIC_FIREBASE_API_KEY &&
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+  );
+}
+
+export function getFirebaseClientAuth() {
+  return auth;
+}
+
+export function getFirebaseClientDb() {
+  return db;
+}
+
+export function getFirebaseClientApp() {
+  return app;
+}

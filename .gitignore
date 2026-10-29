@@ -71,3 +71,4 @@ Thumbs.db
 *.local
 *.bak
 tmp/
+node_modules
