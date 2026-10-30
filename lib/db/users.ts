@@ -125,6 +125,7 @@ export async function getUserProfileByUid(uid: string): Promise<UserProfile | nu
         uid: mock.uid,
         email: mock.email,
         displayName: mock.displayName,
+        photoURL: (mock as any).photoURL || undefined,
         role: mock.role,
         assignedResourceIds: mock.assignedResourceIds,
         trainingVerified: mock.trainingVerified,
@@ -148,6 +149,7 @@ export async function getUserProfileByUid(uid: string): Promise<UserProfile | nu
     uid,
     email: typeof data.email === "string" ? data.email : "",
     displayName: typeof data.displayName === "string" ? data.displayName : (typeof data.name === "string" ? data.name : "Unknown user"),
+    photoURL: typeof data.photoURL === "string" ? data.photoURL : undefined,
     role: normalizeRole(data.role),
     assignedResourceIds: Array.isArray(data.assignedResourceIds)
       ? data.assignedResourceIds.filter((value): value is string => typeof value === "string")
@@ -166,10 +168,14 @@ export async function getUserProfileByUid(uid: string): Promise<UserProfile | nu
  */
 export async function ensureUserProfile(
   uid: string,
-  details: { email?: string; displayName?: string }
+  details: { email?: string; displayName?: string; photoURL?: string }
 ): Promise<UserProfile> {
   const existingByUid = await getUserProfileByUid(uid);
   if (existingByUid) {
+    if (details.photoURL && !existingByUid.photoURL) {
+      await usersCol().doc(uid).set({ photoURL: details.photoURL, updatedAt: nowISO() }, { merge: true });
+      existingByUid.photoURL = details.photoURL;
+    }
     return existingByUid;
   }
 
@@ -191,6 +197,7 @@ export async function ensureUserProfile(
         id: uid,
         email: details.email,
         displayName: existingData.displayName || details.displayName || existingData.name || "Utilix User",
+        photoURL: details.photoURL || existingData.photoURL || undefined,
         updatedAt: nowISO(),
       };
       await userDocRef.set(linkedData, { merge: true });
@@ -207,6 +214,7 @@ export async function ensureUserProfile(
         uid,
         email: details.email,
         displayName: linkedData.displayName,
+        photoURL: linkedData.photoURL,
         role,
         assignedResourceIds: Array.isArray(existingData.assignedResourceIds) ? existingData.assignedResourceIds : [],
         trainingVerified: existingData.trainingVerified === true,
@@ -223,6 +231,7 @@ export async function ensureUserProfile(
     name: details.displayName || "Utilix Student",
     displayName: details.displayName || "Utilix Student",
     email: details.email || "",
+    photoURL: details.photoURL || undefined,
     department_id: "dept_eng",
     year: 1,
     credit_balance: 10,
@@ -249,6 +258,7 @@ export async function ensureUserProfile(
     uid,
     email: newProfile.email,
     displayName: newProfile.displayName,
+    photoURL: newProfile.photoURL,
     role: "student",
     assignedResourceIds: [],
     trainingVerified: false,

@@ -1,5 +1,5 @@
 import { findMockAccountByCredentials, serializeMockSession, toAuthUser, assertMockAuthAllowed } from "../../../../lib/auth/mock";
-import { MOCK_SESSION_COOKIE_NAME } from "../../../../lib/auth/config";
+import { MOCK_SESSION_COOKIE_NAME, SESSION_COOKIE_NAME } from "../../../../lib/auth/config";
 
 interface LoginBody {
   email?: string;
@@ -26,6 +26,10 @@ export async function POST(request: Request) {
     response.headers.append(
       "Set-Cookie",
       `${MOCK_SESSION_COOKIE_NAME}=${session}; Path=/; HttpOnly; SameSite=Lax; Max-Age=28800${isProd ? "; Secure" : ""}`,
+    );
+    response.headers.append(
+      "Set-Cookie",
+      `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
     );
     return response;
   } catch (error) {

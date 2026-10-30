@@ -66,7 +66,7 @@ export function DashboardSidebar({ className, onNavigate }: DashboardSidebarProp
       <div className="space-y-6">
         {/* User Card */}
         <div className="p-4 bg-[#FFFEF2] rounded-2xl border-[3px] border-[#111111] shadow-[3px_3px_0px_#111] flex items-center gap-3">
-          <Avatar name={user.name} role={role} size="md" />
+          <Avatar name={user.name} src={user.photoURL} role={role} size="md" />
           <div className="min-w-0 flex-1">
             <h4 className="text-xs font-black text-[#111111] truncate">{user.name}</h4>
             <p className="text-[11px] font-bold text-[#111111]/70 capitalize">{role} Account</p>

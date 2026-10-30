@@ -89,11 +89,14 @@ function LoginContent() {
   const searchParams = useSearchParams();
   const redirectParam = searchParams.get("redirect");
 
+  type AuthMethod = "google" | "campus-email" | "demo";
+
   const { role, setRole } = useRole();
   const { success, error: toastError } = useToast();
   const {
-    login,
     loginWithGoogle,
+    loginWithCampusEmail,
+    loginWithDemoAccount,
     logout,
     user: authUser,
     loading: authLoading,
@@ -101,12 +104,12 @@ function LoginContent() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [activeTab, setActiveTab] = useState<"google" | "email" | "demo">("google");
+  const [activeTab, setActiveTab] = useState<AuthMethod>("google");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isEmailLoading, setIsEmailLoading] = useState(false);
 
-  // 1. Google Authentication Handler
+  // 1. Google Authentication Handler (Real Firebase Google Auth Only)
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true);
     setErrorMessage(null);
@@ -131,7 +134,7 @@ function LoginContent() {
     }
   };
 
-  // 2. Campus Email & Password Handler
+  // 2. Campus Email & Password Handler (Institutional Email Auth)
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -147,19 +150,15 @@ function LoginContent() {
 
     setIsEmailLoading(true);
     try {
-      await login(email, password);
-
-      // Verify active session profile to determine role
-      const res = await fetch("/api/auth/session");
-      const json = await res.json();
-      const resolvedRole = json?.user?.role || "student";
+      const signedInUser = await loginWithCampusEmail(email, password);
+      const resolvedRole = signedInUser?.role || "student";
       setRole(resolvedRole as Role);
 
       success("Signed in successfully to Utilix.", "Welcome Back");
       const destination = getSafeRedirectUrl(resolvedRole, redirectParam);
       router.push(destination);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Invalid credentials or user not found.";
+      const msg = err instanceof Error ? err.message : "Campus email authentication failed.";
       setErrorMessage(msg);
       toastError(msg, "Sign-In Failed");
     } finally {
@@ -167,7 +166,7 @@ function LoginContent() {
     }
   };
 
-  // 3. One-Click Demo Persona Handler
+  // 3. One-Click Demo Persona Handler (Mock Auth Mode Only)
   const handleDemoSignIn = async (targetRole: Role) => {
     setErrorMessage(null);
     const persona = DEMO_USERS[targetRole];
@@ -175,7 +174,7 @@ function LoginContent() {
 
     setIsEmailLoading(true);
     try {
-      await login(creds.email, creds.pass);
+      const signedInUser = await loginWithDemoAccount(creds.email, creds.pass);
       setRole(targetRole);
       success(
         `Active session: ${persona.name} (${targetRole.toUpperCase()}).`,
@@ -185,7 +184,7 @@ function LoginContent() {
       router.push(destination);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Demo sign-in failed.";
-      setErrorMessage(`${msg} Ensure Firebase Auth and Firestore seed data are active.`);
+      setErrorMessage(msg);
       toastError(msg, "Demo Login Failed");
     } finally {
       setIsEmailLoading(false);
@@ -383,6 +382,32 @@ function LoginContent() {
                     </button>
                   </div>
                 </div>
+              ) : (errorMessage.toLowerCase().includes("unauthorized-domain") ||
+                   errorMessage.toLowerCase().includes("not authorized in firebase console")) ? (
+                <div className="p-4 rounded-2xl bg-amber-50 border-[2.5px] border-amber-600 shadow-[3px_3px_0px_#D97706] text-xs text-amber-950 space-y-3">
+                  <div className="flex items-center gap-2 font-black text-amber-900 text-xs">
+                    <AlertCircle className="w-4 h-4 text-amber-700 stroke-[2.5] shrink-0" />
+                    <span>Authorize Domain in Firebase Console</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-amber-900/90 font-medium">
+                    Firebase Authentication rejected sign-in because <strong>localhost</strong> is not in your authorized domains list for project <strong>utilix-d7843</strong>.
+                  </p>
+                  <ol className="list-decimal list-inside text-[11px] space-y-1 font-semibold text-amber-900 bg-white/70 p-3 rounded-xl border border-amber-200">
+                    <li>Open Firebase Console &rarr; <strong>Authentication</strong> &rarr; <strong>Settings</strong> &rarr; <strong>Authorized domains</strong>.</li>
+                    <li>Click <strong>Add domain</strong> and add <strong>localhost</strong>.</li>
+                  </ol>
+                  <div className="pt-1 flex flex-col sm:flex-row gap-2">
+                    <a
+                      href="https://console.firebase.google.com/project/utilix-d7843/authentication/settings"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-black text-xs text-center border-[2px] border-black shadow-[2px_2px_0px_#111] transition flex items-center justify-center gap-1.5"
+                    >
+                      <span>Open Firebase Settings</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                </div>
               ) : (
                 <div
                   className="p-3.5 rounded-2xl bg-rose-50 border-[2.5px] border-[#DC2626] text-[#DC2626] text-xs font-bold flex items-start gap-2.5 shadow-[2px_2px_0px_#DC2626]"
@@ -412,9 +437,9 @@ function LoginContent() {
               </button>
               <button
                 type="button"
-                onClick={() => { setActiveTab("email"); setErrorMessage(null); }}
+                onClick={() => { setActiveTab("campus-email"); setErrorMessage(null); }}
                 className={`flex-1 py-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-black ${
-                  activeTab === "email"
+                  activeTab === "campus-email"
                     ? "bg-[#FFD60A] text-[#111111] shadow-[2px_2px_0px_#111]"
                     : "text-[#111111]/70 hover:text-[#111111]"
                 }`}
@@ -476,7 +501,7 @@ function LoginContent() {
             )}
 
             {/* ─── TAB 2: Campus Email & Password Form ──────────────────── */}
-            {activeTab === "email" && (
+            {activeTab === "campus-email" && (
               <form onSubmit={handleEmailSignIn} className="space-y-4 pt-1" noValidate>
                 <div>
                   <Input

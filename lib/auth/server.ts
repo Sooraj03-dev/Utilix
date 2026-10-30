@@ -133,13 +133,18 @@ export async function getCurrentUser(
   let profile: {
     email?: string;
     displayName?: string;
+    photoURL?: string;
     role?: UserRole;
     assignedResourceIds?: string[];
     trainingVerified?: boolean;
   } | null = null;
 
   if (options?.getUserProfile) {
-    profile = await options.getUserProfile(decoded.uid);
+    try {
+      profile = await options.getUserProfile(decoded.uid);
+    } catch {
+      profile = null;
+    }
   } else {
     try {
       profile = await getUserProfileByUid(decoded.uid);
@@ -152,6 +157,7 @@ export async function getCurrentUser(
     uid: decoded.uid,
     email: profile?.email || decoded.email || "",
     displayName: profile?.displayName || decoded.name || "Unknown user",
+    photoURL: profile?.photoURL || (decoded as any).picture || undefined,
     role: profile?.role ?? "student",
     assignedResourceIds: profile?.assignedResourceIds ?? [],
     trainingVerified: profile?.trainingVerified ?? false,

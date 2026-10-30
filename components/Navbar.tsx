@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
   Menu,
@@ -18,9 +18,11 @@ import {
   Clock,
   CheckCircle2,
   Layers,
+  LogOut,
 } from "lucide-react";
 import { cn } from "./utils";
 import { useRole } from "./RoleContext";
+import { useAuth } from "@/lib/auth/context";
 import { CreditPill } from "./CreditPill";
 import { Avatar } from "./Avatar";
 import { UtilixLogo } from "./UtilixLogo";
@@ -28,6 +30,8 @@ import { Role } from "./types";
 
 export function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { logout } = useAuth();
   const { role, user, notifications, unreadCount, setRole, markAllAsRead, markAsRead } =
     useRole();
 
@@ -72,17 +76,17 @@ export function Navbar() {
   const roleLabels: Record<Role, { title: string; subtitle: string; color: string }> = {
     student: {
       title: "Student View",
-      subtitle: "Aarav Sharma • 7 Credits",
+      subtitle: `${user.name} • ${user.credits} Credits`,
       color: "bg-[#22C55E]",
     },
     coordinator: {
       title: "Coordinator View",
-      subtitle: "Dr. Sarah Lin • MakerSpace Lead",
+      subtitle: `${user.name} • Lab Oversight`,
       color: "bg-[#38BDF8]",
     },
     admin: {
       title: "Admin View",
-      subtitle: "Marcus Vance • Campus Oversight",
+      subtitle: `${user.name} • Campus Oversight`,
       color: "bg-[#C084FC]",
     },
   };
@@ -248,13 +252,13 @@ export function Navbar() {
                   className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-2 rounded-2xl bg-[#FFFEF2] hover:bg-[#FFD60A] text-[#111111] border-[2.5px] border-[#111111] shadow-[3px_3px_0px_#111] active:translate-x-[1.5px] active:translate-y-[1.5px] active:shadow-none transition min-h-[44px] focus:outline-none focus:ring-2 focus:ring-black"
                   aria-label="User role and account menu"
                 >
-                  <Avatar name={user.name} role={role} size="sm" />
+                  <Avatar name={user.name} src={user.photoURL} role={role} size="sm" />
                   <div className="hidden lg:flex flex-col text-left">
                     <span className="text-xs font-black text-[#111111] leading-tight">
                       {user.name}
                     </span>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-[#111111]/70">
-                      {role} demo
+                      {role} {user.isDemo ? "demo" : ""}
                     </span>
                   </div>
                   <ChevronDown className="w-4 h-4 text-[#111111] stroke-[3] hidden sm:block" />
@@ -265,68 +269,82 @@ export function Navbar() {
                   <div className="absolute right-0 top-full mt-3 w-72 bg-[#FFF8E7] rounded-3xl border-[3.5px] border-[#111111] shadow-[6px_6px_0px_0px_#111111] p-4 z-50 animate-in fade-in zoom-in-95 duration-100">
                     <div className="p-2 border-b-[2.5px] border-[#111111] mb-2 bg-[#FFFEF2] rounded-2xl">
                       <span className="text-[10px] font-black uppercase tracking-wider text-[#111111]/70 block">
-                        Active Utilix Persona
+                        {user.isDemo ? "Active Utilix Persona" : "Verified Account"}
                       </span>
                       <div className="flex items-center gap-2.5 mt-2">
-                        <Avatar name={user.name} role={role} size="md" />
-                        <div>
-                          <p className="text-xs font-black text-[#111111]">{user.name}</p>
-                          <p className="text-[11px] font-medium text-[#111111]/80">{user.department}</p>
-                          <p className="text-[10px] text-[#111111] font-mono font-bold mt-0.5">
+                        <Avatar name={user.name} src={user.photoURL} role={role} size="md" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-black text-[#111111] truncate">{user.name}</p>
+                          <p className="text-[11px] font-medium text-[#111111]/80 truncate">{user.department}</p>
+                          <p className="text-[10px] text-[#111111] font-mono font-bold mt-0.5 truncate">
                             {user.email}
                           </p>
                         </div>
                       </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-[#111111]/70 px-2 block mb-1">
-                        Switch Role View
-                      </span>
-                      {(["student", "coordinator", "admin"] as Role[]).map((r) => {
-                        const item = roleLabels[r];
-                        const isSelected = role === r;
-                        return (
-                          <button
-                            key={r}
-                            type="button"
-                            onClick={() => {
-                              setRole(r);
-                              setRoleDropdownOpen(false);
-                            }}
-                            className={cn(
-                              "w-full text-left p-2.5 rounded-2xl border-[2px] transition flex items-center justify-between min-h-[44px]",
-                              isSelected
-                                ? "bg-[#FFD60A] text-[#111111] border-[#111111] shadow-[2.5px_2.5px_0px_#111] font-black"
-                                : "bg-[#FFFEF2] border-[#111111]/40 hover:border-[#111111] hover:bg-yellow-100/50 text-[#111111]"
-                            )}
-                          >
-                            <div>
-                              <p className="text-xs font-black capitalize flex items-center gap-1.5">
-                                {r}
-                                {isSelected && (
-                                  <span className="text-[9px] bg-black text-[#FFD60A] px-1.5 py-0.2 rounded font-mono font-bold">
-                                    Current
-                                  </span>
-                                )}
-                              </p>
-                              <p className="text-[11px] font-medium text-[#111111]/70">{item.subtitle}</p>
-                            </div>
-                            {isSelected && <Check className="w-4 h-4 text-[#111111] stroke-[3]" />}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {user.isDemo && (
+                      <div className="space-y-1.5">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-[#111111]/70 px-2 block mb-1">
+                          Switch Role View
+                        </span>
+                        {(["student", "coordinator", "admin"] as Role[]).map((r) => {
+                          const item = roleLabels[r];
+                          const isSelected = role === r;
+                          return (
+                            <button
+                              key={r}
+                              type="button"
+                              onClick={() => {
+                                setRole(r);
+                                setRoleDropdownOpen(false);
+                              }}
+                              className={cn(
+                                "w-full text-left p-2.5 rounded-2xl border-[2px] transition flex items-center justify-between min-h-[44px]",
+                                isSelected
+                                  ? "bg-[#FFD60A] text-[#111111] border-[#111111] shadow-[2.5px_2.5px_0px_#111] font-black"
+                                  : "bg-[#FFFEF2] border-[#111111]/40 hover:border-[#111111] hover:bg-yellow-100/50 text-[#111111]"
+                              )}
+                            >
+                              <div>
+                                <p className="text-xs font-black capitalize flex items-center gap-1.5">
+                                  {r}
+                                  {isSelected && (
+                                    <span className="text-[9px] bg-black text-[#FFD60A] px-1.5 py-0.2 rounded font-mono font-bold">
+                                      Current
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="text-[11px] font-medium text-[#111111]/70">{item.subtitle}</p>
+                              </div>
+                              {isSelected && <Check className="w-4 h-4 text-[#111111] stroke-[3]" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
 
-                    <div className="pt-3 mt-3 border-t-[2.5px] border-[#111111] flex items-center justify-between text-xs px-2">
+                    <div className="pt-3 mt-3 border-t-[2.5px] border-[#111111] flex flex-col gap-1 text-xs px-1">
                       <Link
-                        href="/login"
+                        href={homeHref}
                         onClick={() => setRoleDropdownOpen(false)}
-                        className="text-[#111111] font-black hover:underline flex items-center gap-1.5 py-1"
+                        className="p-2 rounded-xl text-[#111111] font-black hover:bg-yellow-100/60 flex items-center gap-2 transition"
                       >
                         <UserCheck className="w-4 h-4 stroke-[2.5]" />
-                        <span>One-click Login Page</span>
+                        <span>Go to Dashboard</span>
                       </Link>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setRoleDropdownOpen(false);
+                          await logout();
+                          router.push("/login");
+                        }}
+                        className="w-full text-left p-2 rounded-xl text-xs font-black text-[#DC2626] hover:bg-rose-50 flex items-center gap-2 transition"
+                      >
+                        <LogOut className="w-4 h-4 stroke-[2.5]" />
+                        <span>Sign Out</span>
+                      </button>
                     </div>
                   </div>
                 )}

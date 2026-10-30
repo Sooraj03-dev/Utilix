@@ -28,20 +28,39 @@ export type TiebreakMethod =
   | "earliest_request"
   | "seeded_lottery";
 
-export interface DemoUser {
+export interface AuthenticatedUser {
+  uid: string;
+  displayName: string;
+  email: string;
+  photoURL?: string;
+  role: Role;
+  creditBalance: number;
+  monthlyCredits: number;
+  freeSessionsLeft: number;
+  freeSessionsUsed: number;
+  departmentId: string;
+  departmentName?: string;
+  year?: number;
+  assignedResourceIds: string[];
+  trainingVerified: boolean;
+  reliability: number;
+  unreadNotificationCount: number;
+  source: "firebase" | "mock";
+  isDemo?: boolean;
+
+  // Compatibility aliases for existing UI components:
   id: string;
   name: string;
-  email: string;
-  role: Role;
-  department: string;
-  avatarUrl?: string;
   credits: number;
   maxCredits: number;
+  department: string;
   yearOrDesignation: string;
   activeRequestsCount: number;
-  trustScore: number; // 0-100% fair return rate
-  isDemo?: boolean;
+  trustScore: number;
+  avatarUrl?: string;
 }
+
+export interface DemoUser extends AuthenticatedUser {}
 
 export interface ResourceItem {
   id: string;

@@ -118,6 +118,7 @@ export async function GET(request: NextRequest | Request) {
         uid: sessionUser.uid,
         email: sessionUser.email,
         displayName: sessionUser.displayName,
+        photoURL: sessionUser.photoURL || userDoc?.photoURL || undefined,
         role: sessionUser.role,
         department_id,
         year,
@@ -130,6 +131,8 @@ export async function GET(request: NextRequest | Request) {
         assignedResourceIds: sessionUser.assignedResourceIds ?? [],
         trainingVerified: sessionUser.trainingVerified ?? false,
         unread_notification_count: unreadNotificationCount,
+        source: sessionUser.source,
+        isDemo: sessionUser.source === "mock",
       },
     });
   } catch (error) {
