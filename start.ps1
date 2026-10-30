@@ -121,11 +121,30 @@ if (-not (Test-Path (Join-Path $ScriptDir "node_modules"))) {
     Write-Host "  [OK] node_modules verified" -ForegroundColor Green
 }
 
+function Free-Port([int]$portNumber, [string]$serviceName) {
+    try {
+        $connections = Get-NetTCPConnection -LocalPort $portNumber -State Listen -ErrorAction SilentlyContinue
+        if ($connections) {
+            foreach ($conn in $connections) {
+                $pId = $conn.OwningProcess
+                if ($pId -and $pId -gt 0) {
+                    Write-Host "  [Notice] Port $portNumber is in use by PID $pId. Freeing port for $serviceName..." -ForegroundColor Yellow
+                    cmd.exe /c "taskkill /PID $pId /T /F" 2>&1 | Out-Null
+                }
+            }
+            Start-Sleep -Milliseconds 800
+        }
+    } catch {
+        # ignore lookup errors
+    }
+}
+
 $aiProcess = $null
 
 try {
     # 4. Start Python AI Service
     if (-not $SkipAi) {
+        Free-Port $AiPort "AI Service"
         Write-Host "[4/5] Launching Python FastAPI AI Service on port $AiPort..." -ForegroundColor Cyan
         
         $aiCommand = "python"
@@ -152,6 +171,7 @@ try {
     }
 
     # 5. Start Next.js Development Server
+    Free-Port $Port "Next.js"
     Write-Host "[5/5] Launching Next.js Application on port $Port..." -ForegroundColor Cyan
     Write-Host ""
     Write-Host "========================================================================" -ForegroundColor Yellow
@@ -171,12 +191,13 @@ try {
     if ($aiProcess -and -not $aiProcess.HasExited) {
         Write-Host "Terminating AI Service (PID: $($aiProcess.Id))..." -ForegroundColor Gray
         try {
-            $aiProcess.Kill()
-            $aiProcess.WaitForExit(3000)
+            cmd.exe /c "taskkill /PID $($aiProcess.Id) /T /F" 2>&1 | Out-Null
+            $aiProcess.WaitForExit(2000)
             Write-Host "  [OK] AI Service terminated." -ForegroundColor Green
         } catch {
             Write-Warning "Could not cleanly terminate AI process: $_"
         }
     }
+    Free-Port $AiPort "AI Service"
     Write-Host "Utilix shutdown complete." -ForegroundColor Green
 }
