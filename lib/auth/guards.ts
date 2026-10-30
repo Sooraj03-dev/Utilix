@@ -17,6 +17,7 @@ export { AuthError };
 export async function requireRoleOrRedirect(
   roles: UserRole[],
   redirectPath?: string,
+  options?: { allowIncomplete?: boolean },
 ): Promise<AuthUser> {
   const user = await getSessionUser();
 
@@ -25,6 +26,10 @@ export async function requireRoleOrRedirect(
       ? `/login?redirect=${encodeURIComponent(redirectPath)}`
       : "/login";
     redirect(loginUrl);
+  }
+
+  if (!options?.allowIncomplete && user.profileCompleted === false && redirectPath !== "/complete-profile") {
+    redirect("/complete-profile");
   }
 
   if (!roles.includes(user.role)) {

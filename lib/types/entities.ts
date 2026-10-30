@@ -27,15 +27,29 @@ export interface User {
   id: string;
   role: UserRole;
   name: string;
+  displayName?: string;
   email: string;
+  photoURL?: string;
+  photo_url?: string | null;
+  student_id?: string;
+  studentId?: string;
   department_id: string;
   year: number;
+  semester?: number;
+  phone_number?: string;
+  phoneNumber?: string;
+  campus?: string;
+  profile_completed?: boolean;
+  profileCompleted?: boolean;
+  account_status?: "active" | "pending_approval" | "suspended";
+  accountStatus?: "active" | "pending_approval" | "suspended";
   credit_balance: number;
   free_sessions_used: number;
   /** ISO week key like "2026-W44"; resets free_sessions_used when week changes */
   free_sessions_week: string;
   active: boolean;
   created_at: string;
+  updated_at?: string;
 }
 
 // ─── departments ───

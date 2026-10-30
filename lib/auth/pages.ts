@@ -28,11 +28,14 @@ export async function getSessionUser(): Promise<AuthUser | null> {
   }
 }
 
-/** Same, but redirects to the login page when signed out. */
-export async function requireSessionUser(): Promise<AuthUser> {
+/** Same, but redirects to the login page when signed out, and /complete-profile when incomplete. */
+export async function requireSessionUser(options?: { allowIncomplete?: boolean }): Promise<AuthUser> {
   const user = await getSessionUser();
   if (!user) {
     redirect("/login");
+  }
+  if (!options?.allowIncomplete && user.profileCompleted === false) {
+    redirect("/complete-profile");
   }
   return user;
 }

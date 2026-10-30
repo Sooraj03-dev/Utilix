@@ -122,6 +122,13 @@ function LoginContent() {
           `Welcome, ${signedInUser.displayName}! Signed in with Google.`,
           "Authentication Success"
         );
+
+        // Check if first-time user profile is incomplete
+        if (signedInUser.profileCompleted === false) {
+          router.push("/complete-profile");
+          return;
+        }
+
         const destination = getSafeRedirectUrl(signedInUser.role, redirectParam);
         router.push(destination);
       }
@@ -327,10 +334,16 @@ function LoginContent() {
                 <div className="flex items-center gap-2 pt-1">
                   <button
                     type="button"
-                    onClick={() => router.push(getSafeRedirectUrl(authUser.role, redirectParam))}
+                    onClick={() =>
+                      router.push(
+                        authUser.profileCompleted === false
+                          ? "/complete-profile"
+                          : getSafeRedirectUrl(authUser.role, redirectParam)
+                      )
+                    }
                     className="flex-1 py-2 px-3 rounded-xl bg-teal-600 text-white font-black text-xs hover:bg-teal-700 transition flex items-center justify-center gap-1 shadow-sm"
                   >
-                    <span>Go to Dashboard</span>
+                    <span>{authUser.profileCompleted === false ? "Complete Profile" : "Go to Dashboard"}</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                   <button

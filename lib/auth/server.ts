@@ -106,7 +106,16 @@ export async function getCurrentUser(
     getUserProfile?: (uid: string) => Promise<{
       email?: string;
       displayName?: string;
+      photoURL?: string;
       role?: UserRole;
+      studentId?: string;
+      departmentId?: string;
+      academicYear?: number;
+      semester?: number;
+      phoneNumber?: string;
+      campus?: string;
+      profileCompleted?: boolean;
+      accountStatus?: import("../types/auth").AccountStatus;
       assignedResourceIds?: string[];
       trainingVerified?: boolean;
     } | null>;
@@ -135,6 +144,14 @@ export async function getCurrentUser(
     displayName?: string;
     photoURL?: string;
     role?: UserRole;
+    studentId?: string;
+    departmentId?: string;
+    academicYear?: number;
+    semester?: number;
+    phoneNumber?: string;
+    campus?: string;
+    profileCompleted?: boolean;
+    accountStatus?: import("../types/auth").AccountStatus;
     assignedResourceIds?: string[];
     trainingVerified?: boolean;
   } | null = null;
@@ -159,6 +176,14 @@ export async function getCurrentUser(
     displayName: profile?.displayName || decoded.name || "Unknown user",
     photoURL: profile?.photoURL || (decoded as any).picture || undefined,
     role: profile?.role ?? "student",
+    studentId: profile?.studentId,
+    departmentId: profile?.departmentId,
+    academicYear: profile?.academicYear,
+    semester: profile?.semester,
+    phoneNumber: profile?.phoneNumber,
+    campus: profile?.campus,
+    profileCompleted: profile?.profileCompleted,
+    accountStatus: profile?.accountStatus || "active",
     assignedResourceIds: profile?.assignedResourceIds ?? [],
     trainingVerified: profile?.trainingVerified ?? false,
     source: "firebase",

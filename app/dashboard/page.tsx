@@ -101,6 +101,61 @@ export default async function DashboardPage() {
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
+  if (userDoc?.account_status === "pending_approval" || sessionUser.accountStatus === "pending_approval") {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-14">
+        <Card variant="yellow" className="p-6 sm:p-10 text-center space-y-4">
+          <Hourglass className="w-12 h-12 mx-auto text-amber-700 stroke-[2.5]" aria-hidden="true" />
+          <h1 className="text-2xl font-black tracking-tight text-black">
+            Account Pending Institutional Approval
+          </h1>
+          <p className="text-sm font-bold text-black/75 max-w-lg mx-auto leading-relaxed">
+            Hi {sessionUser.displayName}, your registration was received and is currently under review by your department administrator.
+          </p>
+          <div className="p-4 rounded-2xl bg-white/80 border-[2px] border-black text-xs text-left max-w-md mx-auto space-y-1">
+            <div className="flex justify-between">
+              <span className="text-black/60 font-bold">Email:</span>
+              <span className="font-mono font-black">{sessionUser.email}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-black/60 font-bold">Status:</span>
+              <span className="font-bold text-amber-800 uppercase">Pending Approval</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-black/60 font-bold">Department:</span>
+              <span className="font-bold text-black">{userDoc?.department_id || "Engineering"}</span>
+            </div>
+          </div>
+          <p className="text-xs text-black/60 font-medium">
+            You will receive full laboratory allocation tools once verified by your institution.
+          </p>
+          <div className="pt-2">
+            <Link href="/profile">
+              <Button variant="secondary" size="sm">
+                View Profile Details
+              </Button>
+            </Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (userDoc?.account_status === "suspended" || sessionUser.accountStatus === "suspended") {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-14">
+        <Card className="p-6 sm:p-10 text-center space-y-4 bg-rose-50 border-[3.5px] border-red-600 shadow-[6px_6px_0px_#DC2626]">
+          <h1 className="text-2xl font-black tracking-tight text-red-900">
+            Account Access Suspended
+          </h1>
+          <p className="text-sm font-bold text-red-800 max-w-lg mx-auto">
+            Your Utilix resource-sharing privileges are currently suspended due to unreturned equipment or policy infractions.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
   if (sessionUser.role !== "student") {
     // Coordinators & admins get a short pointer to their own dashboard.
     return (

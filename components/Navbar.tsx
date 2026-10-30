@@ -333,6 +333,14 @@ export function Navbar() {
                         <UserCheck className="w-4 h-4 stroke-[2.5]" />
                         <span>Go to Dashboard</span>
                       </Link>
+                      <Link
+                        href="/profile"
+                        onClick={() => setRoleDropdownOpen(false)}
+                        className="p-2 rounded-xl text-[#111111] font-black hover:bg-yellow-100/60 flex items-center gap-2 transition"
+                      >
+                        <UserCheck className="w-4 h-4 stroke-[2.5]" />
+                        <span>My Profile &amp; Settings</span>
+                      </Link>
                       <button
                         type="button"
                         onClick={async () => {

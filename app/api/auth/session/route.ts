@@ -43,7 +43,11 @@ export async function POST(request: Request) {
       return null;
     });
 
-    const response = Response.json({ ok: true, user: profile });
+    const response = Response.json({
+      ok: true,
+      user: profile,
+      profileCompleted: profile?.profileCompleted ?? false,
+    });
     const isProd = process.env.NODE_ENV === "production";
     response.headers.append(
       "Set-Cookie",

@@ -2,12 +2,22 @@ export type UserRole = "student" | "coordinator" | "admin";
 
 export type AuthSource = "firebase" | "mock";
 
+export type AccountStatus = "active" | "pending_approval" | "suspended";
+
 export interface UserProfile {
   uid: string;
   email: string;
   displayName: string;
   photoURL?: string;
   role: UserRole;
+  studentId?: string;
+  departmentId?: string;
+  academicYear?: number;
+  semester?: number;
+  phoneNumber?: string;
+  campus?: string;
+  profileCompleted?: boolean;
+  accountStatus?: AccountStatus;
   assignedResourceIds?: string[];
   trainingVerified?: boolean;
   createdAt?: string;
@@ -20,6 +30,14 @@ export interface AuthUser {
   displayName: string;
   photoURL?: string;
   role: UserRole;
+  studentId?: string;
+  departmentId?: string;
+  academicYear?: number;
+  semester?: number;
+  phoneNumber?: string;
+  campus?: string;
+  profileCompleted?: boolean;
+  accountStatus?: AccountStatus;
   assignedResourceIds: string[];
   trainingVerified: boolean;
   source: AuthSource;
@@ -31,13 +49,20 @@ export interface AuthenticatedUser {
   email: string;
   photoURL?: string;
   role: UserRole;
+  studentId?: string;
+  departmentId: string;
+  departmentName?: string;
+  year?: number;
+  academicYear?: number;
+  semester?: number;
+  phoneNumber?: string;
+  campus?: string;
+  profileCompleted?: boolean;
+  accountStatus?: AccountStatus;
   creditBalance: number;
   monthlyCredits: number;
   freeSessionsLeft: number;
   freeSessionsUsed: number;
-  departmentId: string;
-  departmentName?: string;
-  year?: number;
   assignedResourceIds: string[];
   trainingVerified: boolean;
   reliability: number;

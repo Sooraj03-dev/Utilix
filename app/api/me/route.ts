@@ -113,6 +113,22 @@ export async function GET(request: NextRequest | Request) {
       (n) => !n.read,
     ).length;
 
+    const student_id = userDoc?.student_id || userDoc?.studentId || sessionUser.studentId || "";
+    const semester = userDoc?.semester ?? sessionUser.semester ?? (year ? year * 2 : 1);
+    const phone_number = userDoc?.phone_number || userDoc?.phoneNumber || sessionUser.phoneNumber || "";
+    const campus = userDoc?.campus || sessionUser.campus || "Main Campus";
+    const profile_completed =
+      typeof userDoc?.profile_completed === "boolean"
+        ? userDoc.profile_completed
+        : typeof userDoc?.profileCompleted === "boolean"
+        ? userDoc.profileCompleted
+        : sessionUser.profileCompleted ?? (sessionUser.source === "mock");
+    const account_status =
+      userDoc?.account_status ||
+      userDoc?.accountStatus ||
+      sessionUser.accountStatus ||
+      "active";
+
     return NextResponse.json({
       user: {
         uid: sessionUser.uid,
@@ -122,6 +138,16 @@ export async function GET(request: NextRequest | Request) {
         role: sessionUser.role,
         department_id,
         year,
+        semester,
+        student_id,
+        studentId: student_id,
+        phone_number,
+        phoneNumber: phone_number,
+        campus,
+        profile_completed,
+        profileCompleted: profile_completed,
+        account_status,
+        accountStatus: account_status,
         credit_balance,
         monthly_credits,
         free_sessions_used,

@@ -48,6 +48,14 @@ export interface AuthenticatedUser {
   source: "firebase" | "mock";
   isDemo?: boolean;
 
+  studentId?: string;
+  academicYear?: number;
+  semester?: number;
+  phoneNumber?: string;
+  campus?: string;
+  profileCompleted?: boolean;
+  accountStatus?: "active" | "pending_approval" | "suspended";
+
   // Compatibility aliases for existing UI components:
   id: string;
   name: string;
@@ -58,6 +66,7 @@ export interface AuthenticatedUser {
   activeRequestsCount: number;
   trustScore: number;
   avatarUrl?: string;
+  usn?: string;
 }
 
 export interface DemoUser extends AuthenticatedUser {}

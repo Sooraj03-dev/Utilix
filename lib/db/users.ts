@@ -145,12 +145,29 @@ export async function getUserProfileByUid(uid: string): Promise<UserProfile | nu
 
   const data = snapshot.data() ?? {};
 
+  const profileCompleted =
+    typeof data.profile_completed === "boolean"
+      ? data.profile_completed
+      : typeof data.profileCompleted === "boolean"
+      ? data.profileCompleted
+      : Boolean(data.student_id || data.studentId || (data.role && data.role !== "student"));
+
+  const accountStatus = (data.account_status || data.accountStatus || "active") as import("@/lib/types/auth").AccountStatus;
+
   return {
     uid,
     email: typeof data.email === "string" ? data.email : "",
     displayName: typeof data.displayName === "string" ? data.displayName : (typeof data.name === "string" ? data.name : "Unknown user"),
     photoURL: typeof data.photoURL === "string" ? data.photoURL : undefined,
     role: normalizeRole(data.role),
+    studentId: data.student_id || data.studentId || undefined,
+    departmentId: data.department_id || data.departmentId || "dept_eng",
+    academicYear: data.year ?? data.academicYear ?? 1,
+    semester: data.semester ?? 1,
+    phoneNumber: data.phone_number || data.phoneNumber || undefined,
+    campus: data.campus || "Main Campus",
+    profileCompleted,
+    accountStatus,
     assignedResourceIds: Array.isArray(data.assignedResourceIds)
       ? data.assignedResourceIds.filter((value): value is string => typeof value === "string")
       : [],
@@ -164,7 +181,7 @@ export async function getUserProfileByUid(uid: string): Promise<UserProfile | nu
  * Ensures a user profile exists in Firestore for an authenticated user.
  * 1. Checks if profile exists by UID.
  * 2. If not, checks by email (to link pre-seeded accounts and preserve existing roles/credits).
- * 3. If completely new, provisions a new Student profile (Strict: never auto-grant coordinator/admin).
+ * 3. If completely new, provisions a new Student profile with profile_completed: false.
  */
 export async function ensureUserProfile(
   uid: string,
@@ -198,6 +215,8 @@ export async function ensureUserProfile(
         email: details.email,
         displayName: existingData.displayName || details.displayName || existingData.name || "Utilix User",
         photoURL: details.photoURL || existingData.photoURL || undefined,
+        profile_completed: existingData.profile_completed ?? true,
+        account_status: existingData.account_status || "active",
         updatedAt: nowISO(),
       };
       await userDocRef.set(linkedData, { merge: true });
@@ -216,13 +235,21 @@ export async function ensureUserProfile(
         displayName: linkedData.displayName,
         photoURL: linkedData.photoURL,
         role,
+        studentId: existingData.student_id || existingData.studentId,
+        departmentId: existingData.department_id || "dept_eng",
+        academicYear: existingData.year ?? 1,
+        semester: existingData.semester ?? 1,
+        phoneNumber: existingData.phone_number || existingData.phoneNumber,
+        campus: existingData.campus || "Main Campus",
+        profileCompleted: linkedData.profile_completed,
+        accountStatus: linkedData.account_status,
         assignedResourceIds: Array.isArray(existingData.assignedResourceIds) ? existingData.assignedResourceIds : [],
         trainingVerified: existingData.trainingVerified === true,
       };
     }
   }
 
-  // Provision new default student profile
+  // Provision new default student profile (profile_completed: false for first-time registration)
   const now = nowISO();
   const currentWeek = isoWeekKey();
   const newProfile = {
@@ -234,10 +261,16 @@ export async function ensureUserProfile(
     photoURL: details.photoURL || undefined,
     department_id: "dept_eng",
     year: 1,
+    semester: 1,
+    student_id: "",
+    phone_number: "",
+    campus: "Main Campus",
     credit_balance: 10,
     free_sessions_used: 0,
     free_sessions_week: currentWeek,
     active: true,
+    profile_completed: false,
+    account_status: "active",
     trainingVerified: false,
     assignedResourceIds: [],
     created_at: now,
@@ -260,10 +293,154 @@ export async function ensureUserProfile(
     displayName: newProfile.displayName,
     photoURL: newProfile.photoURL,
     role: "student",
+    studentId: "",
+    departmentId: "dept_eng",
+    academicYear: 1,
+    semester: 1,
+    phoneNumber: "",
+    campus: "Main Campus",
+    profileCompleted: false,
+    accountStatus: "active",
     assignedResourceIds: [],
     trainingVerified: false,
     createdAt: now,
   };
+}
+
+export interface CompleteUserProfileInput {
+  displayName?: string;
+  studentId: string;
+  departmentId: string;
+  year: number;
+  semester: number;
+  phoneNumber: string;
+  campus?: string;
+  photoURL?: string;
+  roleRequest?: "student" | "coordinator";
+}
+
+/**
+ * Saves completed profile details into Firestore.
+ * Strictly preserves UID, role, and credit balance.
+ */
+export async function completeUserProfile(
+  uid: string,
+  input: CompleteUserProfileInput
+): Promise<UserProfile> {
+  const userRef = usersCol().doc(uid);
+  const snap = await userRef.get();
+  const existing = snap.data() || {};
+
+  const now = nowISO();
+  const currentRole = normalizeRole(existing.role);
+
+  // If coordinator is requested and current role is student, put in pending approval
+  let accountStatus: import("@/lib/types/auth").AccountStatus =
+    existing.account_status || existing.accountStatus || "active";
+  if (input.roleRequest === "coordinator" && currentRole === "student") {
+    accountStatus = "pending_approval";
+  }
+
+  const cleanStudentId = input.studentId.trim().toUpperCase();
+  const cleanPhone = input.phoneNumber.trim();
+  const cleanDisplayName = (input.displayName || existing.name || existing.displayName || "Utilix Student").trim();
+
+  const updatedFields = {
+    name: cleanDisplayName,
+    displayName: cleanDisplayName,
+    student_id: cleanStudentId,
+    studentId: cleanStudentId,
+    department_id: input.departmentId,
+    year: input.year,
+    semester: input.semester,
+    phone_number: cleanPhone,
+    phoneNumber: cleanPhone,
+    campus: input.campus || existing.campus || "Main Campus",
+    photoURL: input.photoURL || existing.photoURL || undefined,
+    profile_completed: true,
+    profileCompleted: true,
+    account_status: accountStatus,
+    accountStatus: accountStatus,
+    updated_at: now,
+    updatedAt: now,
+  };
+
+  await userRef.set(updatedFields, { merge: true });
+
+  return {
+    uid,
+    email: existing.email || "",
+    displayName: cleanDisplayName,
+    photoURL: updatedFields.photoURL,
+    role: currentRole,
+    studentId: cleanStudentId,
+    departmentId: input.departmentId,
+    academicYear: input.year,
+    semester: input.semester,
+    phoneNumber: cleanPhone,
+    campus: updatedFields.campus,
+    profileCompleted: true,
+    accountStatus,
+    assignedResourceIds: existing.assignedResourceIds || [],
+    trainingVerified: existing.trainingVerified === true,
+    updatedAt: now,
+  };
+}
+
+/**
+ * Updates permitted personal details on a user profile.
+ * Does NOT allow changing role, credit balance, email, or approval status.
+ */
+export async function updateUserProfile(
+  uid: string,
+  input: Partial<CompleteUserProfileInput>
+): Promise<UserProfile> {
+  const userRef = usersCol().doc(uid);
+  const snap = await userRef.get();
+  if (!snap.exists) {
+    throw new Error("User profile not found.");
+  }
+  const existing = snap.data() || {};
+  const now = nowISO();
+
+  const updates: Record<string, any> = {
+    updated_at: now,
+    updatedAt: now,
+  };
+
+  if (input.displayName) {
+    const cleanName = input.displayName.trim();
+    updates.name = cleanName;
+    updates.displayName = cleanName;
+  }
+  if (input.studentId) {
+    const cleanId = input.studentId.trim().toUpperCase();
+    updates.student_id = cleanId;
+    updates.studentId = cleanId;
+  }
+  if (input.departmentId) {
+    updates.department_id = input.departmentId;
+  }
+  if (typeof input.year === "number") {
+    updates.year = input.year;
+  }
+  if (typeof input.semester === "number") {
+    updates.semester = input.semester;
+  }
+  if (input.phoneNumber) {
+    const cleanPhone = input.phoneNumber.trim();
+    updates.phone_number = cleanPhone;
+    updates.phoneNumber = cleanPhone;
+  }
+  if (input.campus) {
+    updates.campus = input.campus;
+  }
+  if (input.photoURL) {
+    updates.photoURL = input.photoURL;
+  }
+
+  await userRef.set(updates, { merge: true });
+  return (await getUserProfileByUid(uid))!;
 }
 
 /**
