@@ -32,15 +32,17 @@ interface AuthContextValue {
   loginWithDemoAccount: (email: string, password: string) => Promise<AuthUser | null>;
   logout: () => Promise<void>;
   refreshIdToken: () => Promise<void>;
+  refreshSession: () => Promise<AuthUser | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-async function syncFirebaseSession(user: User): Promise<void> {
+export async function syncFirebaseSession(user: User): Promise<void> {
   const idToken = await user.getIdToken(true);
   const response = await fetch("/api/auth/session", {
     method: "POST",
     headers: { "content-type": "application/json" },
+    credentials: "include",
     body: JSON.stringify({ idToken }),
   });
 
@@ -50,8 +52,12 @@ async function syncFirebaseSession(user: User): Promise<void> {
   }
 }
 
-async function fetchCurrentUser(): Promise<AuthUser | null> {
-  const response = await fetch("/api/auth/session", { method: "GET" });
+export async function fetchCurrentUser(): Promise<AuthUser | null> {
+  const response = await fetch("/api/auth/session", {
+    method: "GET",
+    cache: "no-store",
+    credentials: "include",
+  });
   if (response.status === 401) {
     return null;
   }
@@ -346,20 +352,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const refreshIdToken = useCallback(async () => {
-    if (isMockAuthEnabled()) {
-      setUser(await fetchCurrentUser());
-      return;
+  const refreshSession = useCallback(async (): Promise<AuthUser | null> => {
+    try {
+      const auth = isFirebaseClientConfigured() ? getFirebaseClientAuth() : null;
+      if (auth?.currentUser) {
+        await syncFirebaseSession(auth.currentUser);
+      }
+      const currentUser = await fetchCurrentUser();
+      setUser(currentUser);
+      return currentUser;
+    } catch (caught) {
+      console.warn("Could not refresh session:", caught);
+      return null;
     }
-
-    const auth = getFirebaseClientAuth();
-    if (!auth?.currentUser) {
-      throw new Error("No active Firebase session.");
-    }
-
-    await syncFirebaseSession(auth.currentUser);
-    setUser(await fetchCurrentUser());
   }, []);
+
+  const refreshIdToken = useCallback(async () => {
+    await refreshSession();
+  }, [refreshSession]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -372,6 +382,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loginWithDemoAccount,
       logout,
       refreshIdToken,
+      refreshSession,
     }),
     [
       user,
@@ -383,6 +394,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loginWithDemoAccount,
       logout,
       refreshIdToken,
+      refreshSession,
     ],
   );
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser, authErrorToResponse } from "@/lib/auth/server";
+import { requireUser, authErrorToResponse, extractBearerToken } from "@/lib/auth/server";
 import { completeUserProfile, getUserProfileByUid, updateUserProfile } from "@/lib/db/users";
-import { isMockAuthEnabled } from "@/lib/auth/config";
+import { isMockAuthEnabled, SESSION_COOKIE_NAME } from "@/lib/auth/config";
 
 export const dynamic = "force-dynamic";
 
@@ -123,13 +123,25 @@ export async function POST(request: NextRequest | Request) {
       roleRequest: requestedRole,
     });
 
-    return NextResponse.json({
+    const bearer = extractBearerToken(request.headers.get("authorization"));
+    const response = NextResponse.json({
       ok: true,
       user: savedProfile,
+      profileCompleted: true,
       message: savedProfile.accountStatus === "pending_approval"
         ? "Profile saved. Coordinator access is pending departmental administrator approval."
         : "Profile completed successfully.",
     });
+
+    if (bearer) {
+      const isProd = process.env.NODE_ENV === "production";
+      response.headers.append(
+        "Set-Cookie",
+        `${SESSION_COOKIE_NAME}=${bearer}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600${isProd ? "; Secure" : ""}`,
+      );
+    }
+
+    return response;
   } catch (error) {
     return authErrorToResponse(error);
   }

@@ -3,6 +3,9 @@ import { getCurrentUser, authErrorToResponse, AuthError } from "../../../../lib/
 import { SESSION_COOKIE_NAME, MOCK_SESSION_COOKIE_NAME } from "../../../../lib/auth/config";
 import { ensureUserProfile } from "../../../../lib/db/users";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 interface SessionBody {
   idToken?: string;
 }
@@ -11,9 +14,12 @@ export async function GET(request: Request) {
   try {
     const user = await getCurrentUser(request);
     if (!user) {
-      return Response.json({ error: "No active session." }, { status: 401 });
+      return Response.json(
+        { error: "No active session." },
+        { status: 401, headers: { "Cache-Control": "no-store, max-age=0" } }
+      );
     }
-    return Response.json({ user });
+    return Response.json({ user }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error) {
     return authErrorToResponse(error);
   }

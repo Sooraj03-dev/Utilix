@@ -164,6 +164,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         unreadNotificationCount: 0,
         source: authUser.source,
         isDemo: authUser.source === "mock",
+        profileCompleted: authUser.profileCompleted,
       };
     }
     return DEMO_USERS.student;
@@ -247,6 +248,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         role: authUser.role as Role,
         source: authUser.source,
         isDemo: authUser.source === "mock",
+        profileCompleted: authUser.profileCompleted,
       }));
       setRoleState(authUser.role as Role);
 

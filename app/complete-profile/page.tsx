@@ -26,7 +26,8 @@ import {
   UtilixMonogram,
   UtilixWordmark,
 } from "@/components";
-import { useAuth } from "@/lib/auth/context";
+import { useAuth, syncFirebaseSession } from "@/lib/auth/context";
+import { getFirebaseClientAuth, isFirebaseClientConfigured } from "@/lib/firebase/client";
 import { useRole } from "@/components/RoleContext";
 import { useToast } from "@/components/ToastContext";
 
@@ -45,8 +46,8 @@ const ACADEMIC_YEARS = [
 
 function CompleteProfileContent() {
   const router = useRouter();
-  const { user: authUser, loading: authLoading } = useAuth();
-  const { refreshUser } = useRole();
+  const { user: authUser, loading: authLoading, refreshSession } = useAuth();
+  const { user: roleUser, refreshUser } = useRole();
   const { success, error: toastError } = useToast();
 
   const [displayName, setDisplayName] = useState("");
@@ -61,6 +62,13 @@ function CompleteProfileContent() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Auto-redirect if profile is already completed
+  useEffect(() => {
+    if (authUser?.profileCompleted === true || roleUser?.profileCompleted === true) {
+      window.location.href = "/dashboard";
+    }
+  }, [authUser?.profileCompleted, roleUser?.profileCompleted]);
 
   // Auto-populate from Google Authentication & existing profile data
   useEffect(() => {
@@ -138,9 +146,28 @@ function CompleteProfileContent() {
     setIsSubmitting(true);
 
     try {
+      // 1. Force-refresh active Firebase client ID token if available
+      const auth = isFirebaseClientConfigured() ? getFirebaseClientAuth() : null;
+      let idToken: string | null = null;
+      if (auth?.currentUser) {
+        try {
+          idToken = await auth.currentUser.getIdToken(true);
+        } catch {
+          // continue with session cookie
+        }
+      }
+
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (idToken) {
+        headers["Authorization"] = `Bearer ${idToken}`;
+      }
+
       const response = await fetch("/api/user/profile", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
+        credentials: "include",
         body: JSON.stringify({
           displayName: displayName.trim(),
           studentId: studentId.trim().toUpperCase(),
@@ -149,17 +176,29 @@ function CompleteProfileContent() {
           semester,
           phoneNumber: phoneNumber.trim(),
           campus: campus.trim() || "Main Campus",
-          photoURL: authUser?.photoURL,
+          photoURL: authUser?.photoURL || auth?.currentUser?.photoURL || undefined,
           roleRequest: applyForCoordinator ? "coordinator" : "student",
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to save profile. Please try again.");
       }
 
+      // 2. Refresh server session cookie & client state in AuthContext and RoleContext
+      if (auth?.currentUser) {
+        try {
+          await syncFirebaseSession(auth.currentUser);
+        } catch {
+          // ignore
+        }
+      }
+
+      if (refreshSession) {
+        await refreshSession();
+      }
       await refreshUser();
 
       success(
@@ -169,8 +208,9 @@ function CompleteProfileContent() {
         "Profile Completed"
       );
 
-      // Redirect to student home
-      router.push("/dashboard");
+      // 3. Force hard browser navigation to /dashboard to bypass App Router client cache
+      router.refresh();
+      window.location.href = "/dashboard";
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "An error occurred while saving your profile.";
       setGeneralError(msg);
@@ -214,7 +254,7 @@ function CompleteProfileContent() {
   }
 
   // Returning user with already completed profile visiting this page
-  if (authUser.profileCompleted === true) {
+  if (authUser.profileCompleted === true || roleUser?.profileCompleted === true) {
     return (
       <div className="min-h-[calc(100vh-140px)] py-12 px-4 flex items-center justify-center">
         <div className="max-w-lg w-full bg-[#FFF9E6] rounded-3xl border-[3.5px] border-black p-8 shadow-[8px_8px_0px_#111] text-center space-y-5">
@@ -222,36 +262,40 @@ function CompleteProfileContent() {
             <CheckCircle2 className="w-8 h-8 text-white stroke-[3]" />
           </div>
           <div className="space-y-1">
-            <h1 className="text-2xl font-black text-[#111111]">Profile Already Completed</h1>
+            <h1 className="text-2xl font-black text-[#111111]">Profile Ready</h1>
             <p className="text-xs text-[#111111]/70 font-semibold">
-              You are signed in as <strong>{authUser.displayName}</strong> ({authUser.email}).
+              Redirecting you to the Utilix campus dashboard...
             </p>
+          </div>
+          <div className="flex items-center justify-center gap-2 py-1">
+            <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs font-black text-black">Opening Dashboard...</span>
           </div>
           <div className="p-4 rounded-2xl bg-white border-[2px] border-black text-left text-xs space-y-1.5 shadow-[2px_2px_0px_#111]">
             <div className="flex justify-between">
               <span className="text-black/60 font-bold">Registration / USN:</span>
-              <span className="font-mono font-black">{authUser.studentId || "Recorded"}</span>
+              <span className="font-mono font-black">{authUser.studentId || roleUser?.studentId || "Recorded"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-black/60 font-bold">Role:</span>
-              <span className="font-black uppercase text-[#22C55E]">{authUser.role}</span>
+              <span className="font-black uppercase text-[#22C55E]">{authUser.role || roleUser?.role || "student"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-black/60 font-bold">Campus:</span>
-              <span className="font-bold">{authUser.campus || "Main Campus"}</span>
+              <span className="font-bold">{authUser.campus || roleUser?.campus || "Main Campus"}</span>
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 pt-2">
-            <Link href="/dashboard" className="flex-1">
+            <a href="/dashboard" className="flex-1">
               <Button variant="primary" size="md" className="w-full">
-                Go to Dashboard →
+                Enter Dashboard Now →
               </Button>
-            </Link>
-            <Link href="/profile" className="flex-1">
+            </a>
+            <a href="/profile" className="flex-1">
               <Button variant="secondary" size="md" className="w-full">
                 Edit Profile Settings
               </Button>
-            </Link>
+            </a>
           </div>
         </div>
       </div>

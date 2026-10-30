@@ -301,4 +301,45 @@ describe("First-Time User Registration & Profile Completion (Phase 13)", () => {
     expect(coordinatorUser.assignedResourceIds).toHaveLength(1);
     expect(adminUser.role).toBe("admin");
   });
+
+  it("16. Session synchronization on profile completion preserves profileCompleted: true and updates session cookie", async () => {
+    // Mock user completing profile via completeUserProfile
+    const mockUser = {
+      uid: "google-uid-sync-test",
+      displayName: "Synced Student",
+      email: "synced.student@campus.edu",
+      role: "student" as const,
+      studentId: "1MS22CS099",
+      departmentId: "dept_eng",
+      academicYear: 3,
+      semester: 5,
+      phoneNumber: "9876543210",
+      campus: "Main Campus",
+      profileCompleted: true,
+      accountStatus: "active" as const,
+      assignedResourceIds: [],
+      trainingVerified: false,
+    };
+
+    const request = new Request("http://localhost/api/user/profile", {
+      headers: {
+        authorization: "Bearer fresh-google-token",
+        cookie: "utilix_session=fresh-google-token",
+      },
+    });
+
+    const user = await getCurrentUser(request, {
+      verifyToken: async () => ({
+        uid: mockUser.uid,
+        email: mockUser.email,
+        name: mockUser.displayName,
+      }) as never,
+      getUserProfile: async () => mockUser,
+    });
+
+    expect(user).not.toBeNull();
+    expect(user?.profileCompleted).toBe(true);
+    expect(user?.studentId).toBe("1MS22CS099");
+    expect(user?.academicYear).toBe(3);
+  });
 });
