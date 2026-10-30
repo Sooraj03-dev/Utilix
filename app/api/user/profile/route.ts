@@ -91,37 +91,43 @@ export async function POST(request: NextRequest | Request) {
     // Role safety: Users can only request student or coordinator. Administrator is NEVER accepted.
     const requestedRole = body.roleRequest === "coordinator" ? "coordinator" : "student";
 
-    if (isMockAuthEnabled()) {
-      // In mock mode, acknowledge update
-      return NextResponse.json({
-        ok: true,
-        user: {
-          ...user,
+    let savedProfile: import("@/lib/types/auth").UserProfile;
+    try {
+      savedProfile = await completeUserProfile(user.uid, {
+        displayName,
+        studentId,
+        departmentId,
+        year,
+        semester,
+        phoneNumber,
+        campus,
+        photoURL,
+        roleRequest: requestedRole,
+      });
+    } catch (err) {
+      console.warn("Could not write to Firestore directly:", err);
+      if (user.source === "mock" || isMockAuthEnabled()) {
+        savedProfile = {
+          uid: user.uid,
+          email: user.email,
           displayName,
+          photoURL,
+          role: user.role || "student",
           studentId,
           departmentId,
           academicYear: year,
           semester,
           phoneNumber,
           campus,
-          photoURL,
           profileCompleted: true,
           accountStatus: requestedRole === "coordinator" && user.role === "student" ? "pending_approval" : "active",
-        },
-      });
+          assignedResourceIds: user.assignedResourceIds || [],
+          trainingVerified: user.trainingVerified || false,
+        };
+      } else {
+        throw err;
+      }
     }
-
-    const savedProfile = await completeUserProfile(user.uid, {
-      displayName,
-      studentId,
-      departmentId,
-      year,
-      semester,
-      phoneNumber,
-      campus,
-      photoURL,
-      roleRequest: requestedRole,
-    });
 
     const bearer = extractBearerToken(request.headers.get("authorization"));
     const response = NextResponse.json({

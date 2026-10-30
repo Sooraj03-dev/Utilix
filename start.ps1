@@ -95,6 +95,14 @@ if ($rootEnvContent -notmatch "AI_SERVICE_SECRET=") {
     Write-Host "  [OK] Configured AI_SERVICE_SECRET in .env.local" -ForegroundColor Green
 }
 
+# Auto-detect Cloud Mode if .env.local has live Firebase credentials and -Mode was not explicitly specified
+if (-not $PSBoundParameters.ContainsKey('Mode')) {
+    if ($rootEnvContent -match "NEXT_PUBLIC_USE_MOCK_AUTH\s*=\s*false" -or ($rootEnvContent -match "FIREBASE_PROJECT_ID\s*=\s*`"utilix" -and $rootEnvContent -notmatch "NEXT_PUBLIC_USE_MOCK_AUTH\s*=\s*true")) {
+        $Mode = 'cloud'
+        Write-Host "  [Auto-Detect] Live Firebase credentials detected in .env.local -> Starting in CLOUD mode" -ForegroundColor Cyan
+    }
+}
+
 if ($Mode -eq 'demo') {
     $env:NEXT_PUBLIC_USE_MOCK_AUTH = "true"
     $env:USE_MOCK_DATA = "true"

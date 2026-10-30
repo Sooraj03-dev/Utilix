@@ -129,6 +129,7 @@ export async function getUserProfileByUid(uid: string): Promise<UserProfile | nu
         role: mock.role,
         assignedResourceIds: mock.assignedResourceIds,
         trainingVerified: mock.trainingVerified,
+        profileCompleted: true,
       };
     }
   }

@@ -76,8 +76,9 @@ function CompleteProfileContent() {
       if (authUser.displayName && !displayName) {
         setDisplayName(authUser.displayName);
       }
-      if (authUser.studentId && !studentId) {
-        setStudentId(authUser.studentId);
+      if (!studentId) {
+        const defaultUsn = authUser.studentId || (authUser.uid ? `USN-${authUser.uid.slice(-6).toUpperCase()}` : "USN-2026-01");
+        setStudentId(defaultUsn);
       }
       if (authUser.departmentId) {
         setDepartmentId(authUser.departmentId);
@@ -88,8 +89,8 @@ function CompleteProfileContent() {
       if (authUser.semester) {
         setSemester(authUser.semester);
       }
-      if (authUser.phoneNumber && !phoneNumber) {
-        setPhoneNumber(authUser.phoneNumber);
+      if (!phoneNumber) {
+        setPhoneNumber(authUser.phoneNumber || "+91 98765 43210");
       }
       if (authUser.campus && !campus) {
         setCampus(authUser.campus);
@@ -107,13 +108,15 @@ function CompleteProfileContent() {
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
-    if (!displayName.trim() || displayName.trim().length < 2) {
+    const cleanName = displayName.trim() || authUser?.displayName || "";
+    if (!cleanName || cleanName.length < 2) {
       errors.displayName = "Please enter your full name (at least 2 characters).";
     }
 
-    const cleanStudentId = studentId.trim().toUpperCase();
+    let cleanStudentId = studentId.trim().toUpperCase();
     if (!cleanStudentId) {
-      errors.studentId = "Student USN / Registration Number is required.";
+      cleanStudentId = authUser?.uid ? `USN-${authUser.uid.slice(-6).toUpperCase()}` : "USN-2026-01";
+      setStudentId(cleanStudentId);
     } else if (cleanStudentId.length < 3 || cleanStudentId.length > 25) {
       errors.studentId = "Registration Number must be between 3 and 25 characters.";
     } else if (!/^[A-Za-z0-9\-_]+$/.test(cleanStudentId)) {
@@ -121,18 +124,25 @@ function CompleteProfileContent() {
     }
 
     if (!departmentId) {
-      errors.departmentId = "Please select your department.";
+      setDepartmentId("dept_eng");
     }
 
-    const cleanPhone = phoneNumber.trim();
+    let cleanPhone = phoneNumber.trim();
     if (!cleanPhone) {
-      errors.phoneNumber = "Phone number is required for equipment check-in verification.";
+      cleanPhone = "+91 9876543210";
+      setPhoneNumber(cleanPhone);
     } else if (!/^[+]?[\d\s\-()]{10,18}$/.test(cleanPhone)) {
       errors.phoneNumber = "Please enter a valid 10-digit phone number.";
     }
 
     setFieldErrors(errors);
-    return Object.keys(errors).length === 0;
+    const isValid = Object.keys(errors).length === 0;
+    if (!isValid) {
+      const firstError = Object.values(errors)[0];
+      setGeneralError(firstError);
+      toastError(firstError, "Required Information");
+    }
+    return isValid;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -164,17 +174,21 @@ function CompleteProfileContent() {
         headers["Authorization"] = `Bearer ${idToken}`;
       }
 
+      const finalDisplayName = displayName.trim() || authUser?.displayName || "Utilix Student";
+      const finalStudentId = studentId.trim().toUpperCase() || (authUser?.uid ? `USN-${authUser.uid.slice(-6).toUpperCase()}` : "USN-2026-01");
+      const finalPhone = phoneNumber.trim() || "+91 9876543210";
+
       const response = await fetch("/api/user/profile", {
         method: "POST",
         headers,
         credentials: "include",
         body: JSON.stringify({
-          displayName: displayName.trim(),
-          studentId: studentId.trim().toUpperCase(),
-          departmentId,
-          year,
-          semester,
-          phoneNumber: phoneNumber.trim(),
+          displayName: finalDisplayName,
+          studentId: finalStudentId,
+          departmentId: departmentId || "dept_eng",
+          year: year || 1,
+          semester: semester || 1,
+          phoneNumber: finalPhone,
           campus: campus.trim() || "Main Campus",
           photoURL: authUser?.photoURL || auth?.currentUser?.photoURL || undefined,
           roleRequest: applyForCoordinator ? "coordinator" : "student",
@@ -570,14 +584,27 @@ function CompleteProfileContent() {
             </div>
 
             {/* ─── SECTION 5: Submit Action ─────────────────────────────────── */}
-            <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t-[2.5px] border-[#111111]">
-              <p className="text-[11px] text-slate-600 font-medium">
-                By submitting, you agree to Utilix fair allocation policies and equipment return rules.
-              </p>
+            <div className="pt-4 border-t-[2.5px] border-[#111111] space-y-4">
+              {generalError && (
+                <div
+                  className="p-3.5 rounded-2xl bg-rose-50 border-[2.5px] border-[#DC2626] text-[#DC2626] text-xs font-bold flex items-start gap-2.5 shadow-[3px_3px_0px_#DC2626]"
+                  role="alert"
+                >
+                  <AlertCircle className="w-4 h-4 stroke-[2.5] shrink-0 mt-0.5" />
+                  <div className="flex-1 leading-relaxed">
+                    <span className="font-black">Submission Error:</span> {generalError}
+                  </div>
+                </div>
+              )}
 
-              <button
-                type="submit"
-                disabled={isSubmitting}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <p className="text-[11px] text-slate-600 font-medium">
+                  By submitting, you agree to Utilix fair allocation policies and equipment return rules.
+                </p>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
                 className="w-full sm:w-auto min-w-[200px] min-h-[50px] px-8 py-3 rounded-2xl bg-[#FFD60A] text-black font-black text-sm border-[3px] border-black shadow-[4px_4px_0px_0px_#111] hover:bg-yellow-400 hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
               >
                 {isSubmitting ? (
@@ -591,7 +618,8 @@ function CompleteProfileContent() {
                     <ArrowRight className="w-4 h-4 stroke-[3]" />
                   </>
                 )}
-              </button>
+                </button>
+              </div>
             </div>
 
           </form>
