@@ -19,7 +19,7 @@ describe("auth server guards", () => {
       ...MOCK_ACCOUNTS[1],
       source: "mock" as const,
     };
-    expect(canAccessResource(coordinator, "res-arduino-kit-a")).toBe(true);
+    expect(canAccessResource(coordinator, coordinator.assignedResourceIds[0])).toBe(true);
     expect(canAccessResource(coordinator, "res-unassigned")).toBe(false);
   });
 

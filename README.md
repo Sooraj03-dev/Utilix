@@ -114,11 +114,11 @@ npm run seed
 
 ## 6. Pre-Configured Demo Accounts
 
-| Persona | Role | Email | Password |
-| :--- | :--- | :--- | :--- |
-| **Student** | Student | `student.demo@utilix.local` | `demo-student` |
-| **Coordinator** | Coordinator | `coord.demo@utilix.local` | `demo-coord` |
-| **Admin** | Administrator | `admin.demo@utilix.local` | `demo-admin` |
+| Persona | Role | Email | Password | Assigned Resources |
+| :--- | :--- | :--- | :--- | :--- |
+| **Student** | Student | `student01@utilix.local` | `UtilixPassword2026!` | N/A (20 credits) |
+| **Coordinator** | Coordinator | `coord-lab@utilix.local` | `UtilixPassword2026!` | Lab resources (Arduino, ESP32, Pi, Lab Pack) |
+| **Admin** | Administrator | `admin-platform@utilix.local` | `UtilixPassword2026!` | All campus resources & oversight |
 
 ---
 

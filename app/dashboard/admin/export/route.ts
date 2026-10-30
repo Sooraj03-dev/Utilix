@@ -21,16 +21,19 @@ function escapeCsv(field: string | number | undefined | null): string {
   return `"${str.replace(/"/g, '""')}"`;
 }
 
+import { requireRoleOrThrow, AuthError } from "@/lib/auth/guards";
+
 export async function GET(request: NextRequest) {
   // 1. Role verification: Admin only
-  const user = await getSessionUser();
-  if (!user || user.role !== "admin") {
+  try {
+    await requireRoleOrThrow(["admin"], request);
+  } catch (error) {
+    const status = error instanceof AuthError ? error.status : 403;
+    const message = error instanceof Error ? error.message : "Forbidden";
     return new Response(
-      JSON.stringify({
-        error: "Forbidden: Admin authorization required to export telemetry data.",
-      }),
+      JSON.stringify({ error: message }),
       {
-        status: 403,
+        status,
         headers: { "Content-Type": "application/json" },
       }
     );

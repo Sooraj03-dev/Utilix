@@ -1,6 +1,4 @@
-import React from "react";
-import { redirect } from "next/navigation";
-import { requireSessionUser } from "@/lib/auth/pages";
+import { requireRoleOrRedirect } from "@/lib/auth/guards";
 import { queryAuditLogs } from "@/lib/db/audit";
 import { buildAuditFilter } from "@/lib/audit-filters";
 import { AuditExplorer } from "./_components/audit-explorer";
@@ -15,10 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminAuditPage({
   searchParams,
 }: AdminAuditPageProps) {
-  const user = await requireSessionUser();
-  if (user.role !== "admin") {
-    redirect("/dashboard");
-  }
+  await requireRoleOrRedirect(["admin"], "/dashboard/admin/audit");
 
   const rawParams = await searchParams;
   const filters = buildAuditFilter(rawParams || {});

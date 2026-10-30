@@ -56,10 +56,12 @@ function GoogleIcon({ className = "w-5 h-5" }: { className?: string }) {
   );
 }
 
+import { getDemoCredentialsForRole } from "@/lib/auth/demo-accounts";
+
 const DEMO_CREDENTIALS: Record<Role, { email: string; pass: string }> = {
-  student: { email: "student01@utilix.local", pass: "UtilixPassword2026!" },
-  coordinator: { email: "coord-lab@utilix.local", pass: "UtilixPassword2026!" },
-  admin: { email: "admin-platform@utilix.local", pass: "UtilixPassword2026!" },
+  student: getDemoCredentialsForRole("student"),
+  coordinator: getDemoCredentialsForRole("coordinator"),
+  admin: getDemoCredentialsForRole("admin"),
 };
 
 function getSafeRedirectUrl(userRole: string, candidate?: string | null): string {

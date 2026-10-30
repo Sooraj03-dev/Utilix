@@ -1,45 +1,15 @@
 import { canUseMockAuthServer } from "./config";
 import type { AuthUser, UserRole } from "../types/auth";
+import {
+  DEMO_ACCOUNTS,
+  type DemoAccount,
+  findDemoAccountByCredentials,
+  findDemoAccountByUid,
+} from "./demo-accounts";
 
-export interface MockAccount {
-  uid: string;
-  email: string;
-  password: string;
-  displayName: string;
-  role: UserRole;
-  assignedResourceIds: string[];
-  trainingVerified: boolean;
-}
+export type MockAccount = DemoAccount;
 
-export const MOCK_ACCOUNTS: MockAccount[] = [
-  {
-    uid: "mock-student-1",
-    email: "student.demo@utilix.local",
-    password: "demo-student",
-    displayName: "Student Demo",
-    role: "student",
-    assignedResourceIds: [],
-    trainingVerified: true,
-  },
-  {
-    uid: "mock-coordinator-1",
-    email: "coordinator.demo@utilix.local",
-    password: "demo-coordinator",
-    displayName: "Coordinator Demo",
-    role: "coordinator",
-    assignedResourceIds: ["res-arduino-kit-a", "res-dslr-cam-1"],
-    trainingVerified: true,
-  },
-  {
-    uid: "mock-admin-1",
-    email: "admin.demo@utilix.local",
-    password: "demo-admin",
-    displayName: "Admin Demo",
-    role: "admin",
-    assignedResourceIds: [],
-    trainingVerified: true,
-  },
-];
+export const MOCK_ACCOUNTS: MockAccount[] = DEMO_ACCOUNTS;
 
 const MOCK_SESSION_TTL_SECONDS = 60 * 60 * 8;
 
@@ -67,17 +37,11 @@ export function assertMockAuthAllowed(): void {
 }
 
 export function findMockAccountByCredentials(email: string, password: string): MockAccount | null {
-  const normalizedEmail = email.trim().toLowerCase();
-  return (
-    MOCK_ACCOUNTS.find(
-      (account) =>
-        account.email.toLowerCase() === normalizedEmail && account.password === password,
-    ) ?? null
-  );
+  return findDemoAccountByCredentials(email, password);
 }
 
 export function findMockAccountByUid(uid: string): MockAccount | null {
-  return MOCK_ACCOUNTS.find((account) => account.uid === uid) ?? null;
+  return findDemoAccountByUid(uid);
 }
 
 export function serializeMockSession(uid: string, now = Date.now()): string {

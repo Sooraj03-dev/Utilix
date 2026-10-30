@@ -12,7 +12,7 @@ import {
   UserCheck,
   Check,
 } from "lucide-react";
-import { getSessionUser } from "@/lib/auth/pages";
+import { requireRoleOrRedirect } from "@/lib/auth/guards";
 import {
   listResources,
   bookingsCol,
@@ -59,12 +59,12 @@ function formatTime(isoString: string): string {
 }
 
 export default async function CoordinatorDashboardPage() {
-  const sessionUser = await getSessionUser();
+  const sessionUser = await requireRoleOrRedirect(["coordinator", "admin"], "/dashboard/coordinator");
   const allResources = await listResources();
 
   // Filter resources managed by current coordinator (or all if admin)
   const managedResources = allResources.filter((res) => {
-    if (!sessionUser || sessionUser.role === "admin") return true;
+    if (sessionUser.role === "admin") return true;
     return (
       res.coordinator_id === sessionUser.uid ||
       Boolean(sessionUser.assignedResourceIds?.includes(res.id))

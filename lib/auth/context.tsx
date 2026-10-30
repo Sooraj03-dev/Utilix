@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import {
-  onAuthStateChanged,
+  onIdTokenChanged,
   signInWithEmailAndPassword,
   signInWithPopup,
   signInWithRedirect,
@@ -117,7 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
     }
 
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onIdTokenChanged(auth, (firebaseUser) => {
       void (async () => {
         try {
           if (!firebaseUser) {

@@ -1,6 +1,4 @@
-import React from "react";
-import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth/pages";
+import { requireRoleOrRedirect } from "@/lib/auth/guards";
 import { CoordinatorNav } from "./_components/coordinator-nav";
 import { ShieldCheck } from "lucide-react";
 
@@ -9,10 +7,7 @@ export default async function CoordinatorLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getSessionUser();
-  if (user && user.role !== "coordinator" && user.role !== "admin") {
-    redirect("/dashboard");
-  }
+  const user = await requireRoleOrRedirect(["coordinator", "admin"], "/dashboard/coordinator");
 
   return (
     <div className="min-h-screen bg-[#FAF8F5] text-[#111111] pb-16">

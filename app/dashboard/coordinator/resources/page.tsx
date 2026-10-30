@@ -11,7 +11,7 @@ import {
   Calendar,
   Coins,
 } from "lucide-react";
-import { getSessionUser } from "@/lib/auth/pages";
+import { requireRoleOrRedirect } from "@/lib/auth/guards";
 import { listResources, availabilityWindowsCol } from "@/lib/db";
 import type { Resource } from "@/lib/types";
 import {
@@ -21,12 +21,12 @@ import {
 import type { ResourceStatus as ComponentResourceStatus } from "@/components/types";
 
 export default async function CoordinatorResourcesPage() {
-  const sessionUser = await getSessionUser();
+  const sessionUser = await requireRoleOrRedirect(["coordinator", "admin"], "/dashboard/coordinator/resources");
   const allResources = await listResources();
 
   // Filter for coordinator's managed resources (or all if admin)
   const managedResources = allResources.filter((res) => {
-    if (!sessionUser || sessionUser.role === "admin") return true;
+    if (sessionUser.role === "admin") return true;
     return (
       res.coordinator_id === sessionUser.uid ||
       Boolean(sessionUser.assignedResourceIds?.includes(res.id))

@@ -1,7 +1,6 @@
 import React from "react";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { requireSessionUser } from "@/lib/auth/pages";
+import { requireRoleOrRedirect } from "@/lib/auth/guards";
 import { fetchAIInsights } from "./ai-insights-adapter";
 import { loadAdminKpis, type AdminKpiReport } from "@/lib/db/kpis";
 import type { AIInsightsResponse } from "@/lib/types";
@@ -25,10 +24,7 @@ import { cn } from "@/components/utils";
 export const dynamic = "force-dynamic";
 
 export default async function AdminInsightsPage() {
-  const user = await requireSessionUser();
-  if (user.role !== "admin") {
-    redirect("/dashboard");
-  }
+  await requireRoleOrRedirect(["admin"], "/dashboard/admin/insights");
 
   let aiInsights: AIInsightsResponse | null = null;
   let aiError: string | null = null;

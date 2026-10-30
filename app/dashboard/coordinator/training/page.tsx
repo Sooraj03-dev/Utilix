@@ -1,7 +1,7 @@
 import React from "react";
 import { redirect } from "next/navigation";
 import { GraduationCap, ShieldCheck } from "lucide-react";
-import { getSessionUser } from "@/lib/auth/pages";
+import { requireRoleOrRedirect } from "@/lib/auth/guards";
 import {
   listResources,
   listTrainingRequestsForTypes,
@@ -17,20 +17,17 @@ import type {
 import { TrainingManager } from "./_components/training-manager";
 
 export default async function CoordinatorTrainingPage() {
-  const sessionUser = await getSessionUser();
-  if (sessionUser && sessionUser.role !== "coordinator" && sessionUser.role !== "admin") {
-    redirect("/dashboard");
-  }
+  const sessionUser = await requireRoleOrRedirect(["coordinator", "admin"], "/dashboard/coordinator/training");
 
   const allResources = await listResources();
-  const isAdmin = sessionUser?.role === "admin";
+  const isAdmin = sessionUser.role === "admin";
 
   // Identify training types relevant to this coordinator
   const managedTrainingTypes = [
     ...new Set(
       allResources
         .filter((r) => {
-          if (isAdmin || !sessionUser) return true;
+          if (isAdmin) return true;
           return (
             r.coordinator_id === sessionUser.uid ||
             Boolean(sessionUser.assignedResourceIds?.includes(r.id))

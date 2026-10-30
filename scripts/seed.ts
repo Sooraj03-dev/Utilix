@@ -103,6 +103,12 @@ async function upsertFirebaseData(target: SeedTarget): Promise<void> {
       }
     }
 
+    try {
+      await auth.setCustomUserClaims(user.id, { role: user.role });
+    } catch {
+      // ignore in environments without live claims support
+    }
+
     const firestoreUser = {
       id: user.id,
       name: user.displayName,

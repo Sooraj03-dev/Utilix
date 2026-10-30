@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 
 process.env.USE_MOCK_DATA = "true";
 process.env.NEXT_PUBLIC_USE_MOCK_DATA = "true";
+process.env.NEXT_PUBLIC_USE_MOCK_AUTH = "true";
+
+import { serializeMockSession } from "../../../lib/auth/mock";
+const mockCookie = `utilix_mock_session=${serializeMockSession("student-01")}`;
 
 import { validateBookingForm, timeToMinutes } from "./validation";
 import { MockWorkflowAdapter } from "./workflow-adapter";
@@ -258,7 +262,7 @@ test("Workflow API Routes handle full lifecycle with mock adapter", async () => 
   // 3. POST /api/workflow/requests - Invalid validation returns 400
   const reqInvalid = new NextRequest("http://localhost:3000/api/workflow/requests", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", cookie: mockCookie },
     body: JSON.stringify({ resourceId: "res_printer1", purpose: "abc" }),
   });
   const resInvalid = await createRequestRoute(reqInvalid);
@@ -274,7 +278,7 @@ test("Workflow API Routes handle full lifecycle with mock adapter", async () => 
 
   const reqValid = new NextRequest("http://localhost:3000/api/workflow/requests", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", cookie: mockCookie },
     body: JSON.stringify({
       resourceId: "res_printer1",
       date: tomorrowStr,
@@ -294,7 +298,9 @@ test("Workflow API Routes handle full lifecycle with mock adapter", async () => 
   const newRequestId = dataValid.data.booking.id;
 
   // 5. GET /api/workflow/requests/[id]
-  const reqGet = new NextRequest(`http://localhost:3000/api/workflow/requests/${newRequestId}`);
+  const reqGet = new NextRequest(`http://localhost:3000/api/workflow/requests/${newRequestId}`, {
+    headers: { cookie: mockCookie },
+  });
   const resGet = await getRequestByIdRoute(reqGet, { params: Promise.resolve({ id: newRequestId }) });
   const dataGet = await resGet.json();
   assert.equal(resGet.status, 200);
@@ -302,7 +308,9 @@ test("Workflow API Routes handle full lifecycle with mock adapter", async () => 
   assert.equal(dataGet.data.id, newRequestId);
 
   // 6. GET /api/workflow/requests (list)
-  const reqList = new NextRequest("http://localhost:3000/api/workflow/requests");
+  const reqList = new NextRequest("http://localhost:3000/api/workflow/requests", {
+    headers: { cookie: mockCookie },
+  });
   const resList = await getRequestsRoute(reqList);
   const dataList = await resList.json();
   assert.equal(resList.status, 200);
@@ -312,6 +320,7 @@ test("Workflow API Routes handle full lifecycle with mock adapter", async () => 
   // 7. POST /api/workflow/requests/[id]/cancel
   const reqCancel = new NextRequest(`http://localhost:3000/api/workflow/requests/${newRequestId}/cancel`, {
     method: "POST",
+    headers: { cookie: mockCookie },
   });
   const resCancel = await cancelRequestRoute(reqCancel, { params: Promise.resolve({ id: newRequestId }) });
   const dataCancel = await resCancel.json();

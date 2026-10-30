@@ -8,7 +8,7 @@ import {
   Wrench,
   Coins,
 } from "lucide-react";
-import { getSessionUser } from "@/lib/auth/pages";
+import { requireRoleOrRedirect } from "@/lib/auth/guards";
 import {
   getResourceById,
   listAvailabilityWindowsByResource,
@@ -26,11 +26,7 @@ interface PageProps {
 
 export default async function EditResourcePage({ params }: PageProps) {
   const { id } = await params;
-  const user = await getSessionUser();
-
-  if (user && user.role !== "coordinator" && user.role !== "admin") {
-    redirect("/dashboard");
-  }
+  const user = await requireRoleOrRedirect(["coordinator", "admin"], `/dashboard/coordinator/resources/${id}/edit`);
 
   const resource = await getResourceById(id);
   if (!resource) {

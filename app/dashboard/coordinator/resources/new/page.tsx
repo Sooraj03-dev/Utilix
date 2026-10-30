@@ -1,14 +1,9 @@
-import React from "react";
-import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth/pages";
+import { requireRoleOrRedirect } from "@/lib/auth/guards";
 import { ResourceForm } from "../_components/resource-form";
 import { Plus } from "lucide-react";
 
 export default async function NewResourcePage() {
-  const user = await getSessionUser();
-  if (user && user.role !== "coordinator" && user.role !== "admin") {
-    redirect("/dashboard");
-  }
+  await requireRoleOrRedirect(["coordinator", "admin"], "/dashboard/coordinator/resources/new");
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">

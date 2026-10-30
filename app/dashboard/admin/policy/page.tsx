@@ -1,15 +1,11 @@
 import React from "react";
-import { redirect } from "next/navigation";
 import { Sliders, ShieldAlert } from "lucide-react";
-import { getSessionUser } from "@/lib/auth/pages";
+import { requireRoleOrRedirect } from "@/lib/auth/guards";
 import { getActivePolicy, listPolicyVersions } from "@/lib/db";
 import { PolicyEditor } from "./_components/policy-editor";
 
 export default async function AdminPolicyPage() {
-  const user = await getSessionUser();
-  if (user && user.role !== "admin") {
-    redirect("/dashboard");
-  }
+  await requireRoleOrRedirect(["admin"], "/dashboard/admin/policy");
 
   const activePolicy = await getActivePolicy();
   const history = await listPolicyVersions();

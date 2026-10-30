@@ -1,4 +1,19 @@
-export { requireUser, AuthError } from "./require-user";
+export {
+  getCurrentUser,
+  requireUser,
+  requireRole,
+  canAccessResource,
+  AuthError,
+  authErrorToResponse,
+} from "./server";
 export { homePathForRole } from "./nav";
 export { getSessionUser, requireSessionUser } from "./pages";
-export { canAccessResource, requireRole, getCurrentUser } from "./server";
+export { requireRoleOrRedirect, requireRoleOrThrow } from "./guards";
+export {
+  DEMO_ACCOUNTS,
+  DEMO_PASSWORD,
+  findDemoAccountByCredentials,
+  findDemoAccountByEmail,
+  findDemoAccountByUid,
+  getDemoCredentialsForRole,
+} from "./demo-accounts";

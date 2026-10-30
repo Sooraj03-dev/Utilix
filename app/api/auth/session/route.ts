@@ -43,9 +43,10 @@ export async function POST(request: Request) {
     });
 
     const response = Response.json({ ok: true, user: profile });
+    const isProd = process.env.NODE_ENV === "production";
     response.headers.append(
       "Set-Cookie",
-      `${SESSION_COOKIE_NAME}=${body.idToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600`,
+      `${SESSION_COOKIE_NAME}=${body.idToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600${isProd ? "; Secure" : ""}`,
     );
     return response;
   } catch (error) {

@@ -10,9 +10,15 @@ import { POST as createRequestRoute } from "@/app/api/workflow/requests/route";
 import { GET as getRequestByIdRoute } from "@/app/api/workflow/requests/[id]/route";
 import { POST as cancelRequestRoute } from "@/app/api/workflow/requests/[id]/cancel/route";
 import { canTransition, assertTransition, InvalidTransitionError } from "@/lib/types/status";
+import { serializeMockSession } from "@/lib/auth/mock";
 
 // Force mock mode for unit tests
 process.env.USE_MOCK_DATA = "true";
+process.env.NEXT_PUBLIC_USE_MOCK_AUTH = "true";
+
+function authCookie(uid: string = "student-01"): string {
+  return `utilix_mock_session=${serializeMockSession(uid)}`;
+}
 
 describe("Workflow — Form Validation & Time Utilities", () => {
   it("converts HH:mm strings to minutes correctly", () => {
@@ -318,6 +324,7 @@ describe("Workflow — State Machine Status Transitions", () => {
 describe("Workflow — API Routes Integration", () => {
   beforeEach(() => {
     process.env.USE_MOCK_DATA = "true";
+    process.env.NEXT_PUBLIC_USE_MOCK_AUTH = "true";
   });
 
   it("GET /api/workflow/resources returns resources list", async () => {
@@ -345,7 +352,7 @@ describe("Workflow — API Routes Integration", () => {
   it("POST /api/workflow/requests rejects invalid inputs with 400", async () => {
     const req = new NextRequest("http://localhost:3000/api/workflow/requests", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", cookie: authCookie("student-01") },
       body: JSON.stringify({ resourceId: "res_printer1", purpose: "short" }),
     });
     const res = await createRequestRoute(req);
@@ -362,7 +369,7 @@ describe("Workflow — API Routes Integration", () => {
 
     const createReq = new NextRequest("http://localhost:3000/api/workflow/requests", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", cookie: authCookie("student-01") },
       body: JSON.stringify({
         resourceId: "res_printer1",
         date: dateStr,
@@ -379,7 +386,9 @@ describe("Workflow — API Routes Integration", () => {
     const bookingId = createJson.data.booking.id;
 
     // GET /api/workflow/requests/[id]
-    const getReq = new NextRequest(`http://localhost:3000/api/workflow/requests/${bookingId}`);
+    const getReq = new NextRequest(`http://localhost:3000/api/workflow/requests/${bookingId}`, {
+      headers: { cookie: authCookie("student-01") },
+    });
     const getRes = await getRequestByIdRoute(getReq, { params: Promise.resolve({ id: bookingId }) });
     expect(getRes.status).toBe(200);
     const getJson = await getRes.json();
@@ -388,7 +397,7 @@ describe("Workflow — API Routes Integration", () => {
     // POST /api/workflow/requests/[id]/cancel
     const cancelReq = new NextRequest(`http://localhost:3000/api/workflow/requests/${bookingId}/cancel`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", cookie: authCookie("student-01") },
       body: JSON.stringify({ reason: "No longer needed" }),
     });
     const cancelRes = await cancelRequestRoute(cancelReq, { params: Promise.resolve({ id: bookingId }) });
@@ -401,6 +410,7 @@ describe("Workflow — API Routes Integration", () => {
 describe("Scenario S1 — Direct Contention, Fair Allocation, Waitlist & Credits", () => {
   beforeEach(() => {
     process.env.USE_MOCK_DATA = "true";
+    process.env.NEXT_PUBLIC_USE_MOCK_AUTH = "true";
   });
 
   it("executes Scenario S1 end-to-end: two teams compete for the same slot", async () => {
@@ -414,9 +424,7 @@ describe("Scenario S1 — Direct Contention, Fair Allocation, Waitlist & Credits
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-mock-role": "student",
-        "x-mock-uid": "student-01",
-        "x-mock-name": "Alice Chen",
+        cookie: authCookie("student-01"),
       },
       body: JSON.stringify({
         resourceId,
@@ -441,9 +449,7 @@ describe("Scenario S1 — Direct Contention, Fair Allocation, Waitlist & Credits
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-mock-role": "student",
-        "x-mock-uid": "student-02",
-        "x-mock-name": "Bob Smith",
+        cookie: authCookie("student-02"),
       },
       body: JSON.stringify({
         resourceId,
@@ -461,7 +467,7 @@ describe("Scenario S1 — Direct Contention, Fair Allocation, Waitlist & Credits
 
     // Contention Verification:
     // Only ONE booking holds the slot; the other is waitlisted!
-    const coordHeader = { "x-mock-role": "coordinator" };
+    const coordHeader = { cookie: authCookie("coordinator-01") };
     const booking1After = await (await getRequestByIdRoute(
       new NextRequest(`http://localhost:3000/api/workflow/requests/${firstBookingId}`, { headers: coordHeader }),
       { params: Promise.resolve({ id: firstBookingId }) },
@@ -500,8 +506,7 @@ describe("Scenario S1 — Direct Contention, Fair Allocation, Waitlist & Credits
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-mock-role": "student",
-          "x-mock-uid": confirmedBooking.user_id,
+          cookie: authCookie(confirmedBooking.user_id),
         },
         body: JSON.stringify({ reason: "Finished project early" }),
       },
@@ -529,11 +534,14 @@ describe("Scenario S1 — Direct Contention, Fair Allocation, Waitlist & Credits
 describe("Workflow — Eligibility Checks & Policy Constraints", () => {
   beforeEach(() => {
     process.env.USE_MOCK_DATA = "true";
+    process.env.NEXT_PUBLIC_USE_MOCK_AUTH = "true";
   });
 
   it("checks student eligibility via /api/workflow/eligibility route", async () => {
     const { GET: getEligibilityRoute } = await import("@/app/api/workflow/eligibility/route");
-    const req = new NextRequest("http://localhost:3000/api/workflow/eligibility?resourceId=res_printer1");
+    const req = new NextRequest("http://localhost:3000/api/workflow/eligibility?resourceId=res_printer1", {
+      headers: { cookie: authCookie("student-01") },
+    });
     const res = await getEligibilityRoute(req);
     expect(res.status).toBe(200);
     const json = await res.json();
@@ -547,6 +555,7 @@ describe("Workflow — Eligibility Checks & Policy Constraints", () => {
 describe("Workflow — Coordinator Lifecycle & Security Invariants", () => {
   beforeEach(() => {
     process.env.USE_MOCK_DATA = "true";
+    process.env.NEXT_PUBLIC_USE_MOCK_AUTH = "true";
   });
 
   it("completes full coordinator lifecycle: approve -> checkout -> checkin", async () => {
@@ -563,8 +572,7 @@ describe("Workflow — Coordinator Lifecycle & Security Invariants", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-mock-role": "student",
-        "x-mock-uid": "student-01",
+        cookie: authCookie("student-01"),
       },
       body: JSON.stringify({
         resourceId: "res_studio_a",
@@ -584,7 +592,7 @@ describe("Workflow — Coordinator Lifecycle & Security Invariants", () => {
     // 2. Unauthorized student cannot approve!
     const unauthApprove = new NextRequest(`http://localhost:3000/api/workflow/requests/${bookingId}/approve`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-mock-role": "student" },
+      headers: { "Content-Type": "application/json", cookie: authCookie("student-01") },
       body: JSON.stringify({ note: "Self-approval attempt" }),
     });
     const unauthRes = await approveRoute(unauthApprove, { params: Promise.resolve({ id: bookingId }) });
@@ -593,7 +601,7 @@ describe("Workflow — Coordinator Lifecycle & Security Invariants", () => {
     // 3. Coordinator approves booking
     const coordApprove = new NextRequest(`http://localhost:3000/api/workflow/requests/${bookingId}/approve`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-mock-role": "coordinator" },
+      headers: { "Content-Type": "application/json", cookie: authCookie("coordinator-01") },
       body: JSON.stringify({ note: "Schedule verified by lab manager" }),
     });
     const coordRes = await approveRoute(coordApprove, { params: Promise.resolve({ id: bookingId }) });
@@ -604,7 +612,7 @@ describe("Workflow — Coordinator Lifecycle & Security Invariants", () => {
     // 4. Coordinator checks out equipment/studio
     const checkoutReq = new NextRequest("http://localhost:3000/api/workflow/checkout", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-mock-role": "coordinator" },
+      headers: { "Content-Type": "application/json", cookie: authCookie("coordinator-01") },
       body: JSON.stringify({
         bookingId,
         itemCondition: "pristine",
@@ -619,7 +627,7 @@ describe("Workflow — Coordinator Lifecycle & Security Invariants", () => {
     // 5. Illegal transition: cannot cancel a checked-out booking!
     const illegalCancelReq = new NextRequest(`http://localhost:3000/api/workflow/requests/${bookingId}/cancel`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-mock-role": "student", "x-mock-uid": "student-01" },
+      headers: { "Content-Type": "application/json", cookie: authCookie("student-01") },
     });
     const illegalCancelRes = await cancelRequestRoute(illegalCancelReq, { params: Promise.resolve({ id: bookingId }) });
     expect(illegalCancelRes.status).toBe(400);
@@ -627,7 +635,7 @@ describe("Workflow — Coordinator Lifecycle & Security Invariants", () => {
     // 6. Coordinator checks in returned equipment
     const checkinReq = new NextRequest("http://localhost:3000/api/workflow/checkin", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-mock-role": "coordinator" },
+      headers: { "Content-Type": "application/json", cookie: authCookie("coordinator-01") },
       body: JSON.stringify({
         bookingId,
         itemCondition: "good",
@@ -646,7 +654,7 @@ describe("Workflow — Coordinator Lifecycle & Security Invariants", () => {
     // Missing reason must be rejected with 400
     const badReq = new NextRequest("http://localhost:3000/api/workflow/conflicts/conf_01/resolve", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-mock-role": "coordinator" },
+      headers: { "Content-Type": "application/json", cookie: authCookie("coordinator-01") },
       body: JSON.stringify({ resolution: "approve_override", overrideReason: "" }),
     });
     const badRes = await conflictRoute(badReq, { params: Promise.resolve({ id: "conf_01" }) });
@@ -655,7 +663,7 @@ describe("Workflow — Coordinator Lifecycle & Security Invariants", () => {
     // Valid override with reason succeeds
     const goodReq = new NextRequest("http://localhost:3000/api/workflow/conflicts/conf_01/resolve", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-mock-role": "coordinator" },
+      headers: { "Content-Type": "application/json", cookie: authCookie("coordinator-01") },
       body: JSON.stringify({
         resolution: "approve_override",
         overrideReason: "Department Dean approved capstone priority override",

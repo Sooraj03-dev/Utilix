@@ -8,7 +8,7 @@ import { docToEntity, nowISO, nowTimestamp } from "./converters";
 import type { User, UserRole } from "@/lib/types";
 import type { UserProfile } from "@/lib/types/auth";
 import type { Transaction } from "firebase-admin/firestore";
-import { getFirebaseAdminDb } from "../firebase/admin";
+import { getFirebaseAdminDb, getFirebaseAdminAuth } from "../firebase/admin";
 import { findMockAccountByUid } from "../auth/mock";
 import { isMockAuthEnabled } from "../auth/config";
 import { isoWeekKey } from "./weekKey";
@@ -194,11 +194,20 @@ export async function ensureUserProfile(
         updatedAt: nowISO(),
       };
       await userDocRef.set(linkedData, { merge: true });
+      const role = normalizeRole(existingData.role);
+      const auth = getFirebaseAdminAuth();
+      if (auth) {
+        try {
+          await auth.setCustomUserClaims(uid, { role });
+        } catch {
+          // ignore when admin auth lacks custom claims support
+        }
+      }
       return {
         uid,
         email: details.email,
         displayName: linkedData.displayName,
-        role: normalizeRole(existingData.role),
+        role,
         assignedResourceIds: Array.isArray(existingData.assignedResourceIds) ? existingData.assignedResourceIds : [],
         trainingVerified: existingData.trainingVerified === true,
       };
@@ -227,6 +236,15 @@ export async function ensureUserProfile(
 
   await userDocRef.set(newProfile);
 
+  const auth = getFirebaseAdminAuth();
+  if (auth) {
+    try {
+      await auth.setCustomUserClaims(uid, { role: "student" });
+    } catch {
+      // ignore
+    }
+  }
+
   return {
     uid,
     email: newProfile.email,
@@ -236,4 +254,24 @@ export async function ensureUserProfile(
     trainingVerified: false,
     createdAt: now,
   };
+}
+
+/**
+ * Updates a user's role in Firestore and sets the role custom claim on their Firebase Auth record.
+ * Used for role administration and role changes.
+ */
+export async function setUserRoleAndClaim(uid: string, role: UserRole): Promise<void> {
+  const db = getFirebaseAdminDb();
+  if (db) {
+    await usersCol().doc(uid).update({ role, updatedAt: nowISO() });
+  }
+
+  const auth = getFirebaseAdminAuth();
+  if (auth) {
+    try {
+      await auth.setCustomUserClaims(uid, { role });
+    } catch {
+      // ignore in tests or mock environments
+    }
+  }
 }

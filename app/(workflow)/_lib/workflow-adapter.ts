@@ -32,6 +32,7 @@ import {
 
 import { aiClient } from "@/lib/ai-client";
 import { assertTransition } from "@/lib/types/status";
+import { isMockAuthEnabled } from "@/lib/auth/config";
 
 // ─── Adapter Interface ───────────────────────────────────────────────────
 
@@ -1464,9 +1465,7 @@ class DynamicWorkflowAdapter implements WorkflowDataAdapter {
   private firebaseAdapter?: FirebaseWorkflowAdapter;
 
   private get delegate(): WorkflowDataAdapter {
-    const useMock =
-      process.env.USE_MOCK_DATA === "true" ||
-      process.env.NEXT_PUBLIC_USE_MOCK_DATA === "true";
+    const useMock = isMockAuthEnabled();
 
     if (useMock) {
       return this.mockAdapter;

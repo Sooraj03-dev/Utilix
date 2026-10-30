@@ -22,9 +22,10 @@ export async function POST(request: Request) {
 
     const session = serializeMockSession(account.uid);
     const response = Response.json({ user: toAuthUser(account) });
+    const isProd = process.env.NODE_ENV === "production";
     response.headers.append(
       "Set-Cookie",
-      `${MOCK_SESSION_COOKIE_NAME}=${session}; Path=/; HttpOnly; SameSite=Lax; Max-Age=28800`,
+      `${MOCK_SESSION_COOKIE_NAME}=${session}; Path=/; HttpOnly; SameSite=Lax; Max-Age=28800${isProd ? "; Secure" : ""}`,
     );
     return response;
   } catch (error) {

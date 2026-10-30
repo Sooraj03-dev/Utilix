@@ -1,6 +1,4 @@
-import React from "react";
-import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth/pages";
+import { requireRoleOrRedirect } from "@/lib/auth/guards";
 import { AdminNav } from "./_components/admin-nav";
 import { ShieldAlert } from "lucide-react";
 
@@ -9,10 +7,7 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getSessionUser();
-  if (user && user.role !== "admin") {
-    redirect("/dashboard");
-  }
+  const user = await requireRoleOrRedirect(["admin"], "/dashboard/admin");
 
   return (
     <div className="min-h-screen bg-[#FAF8F5] text-[#111111] pb-16">
