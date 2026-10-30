@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
   Menu,
@@ -18,9 +18,11 @@ import {
   Clock,
   CheckCircle2,
   Layers,
+  LogOut,
 } from "lucide-react";
 import { cn } from "./utils";
 import { useRole } from "./RoleContext";
+import { AuthContext } from "@/lib/auth/context";
 import { CreditPill } from "./CreditPill";
 import { Avatar } from "./Avatar";
 import { UtilixLogo } from "./UtilixLogo";
@@ -28,8 +30,18 @@ import { Role } from "./types";
 
 export function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const authContext = React.useContext(AuthContext);
+  const authUser = authContext?.user ?? null;
+  const logout = authContext?.logout;
+
   const { role, user, notifications, unreadCount, setRole, markAllAsRead, markAsRead } =
     useRole();
+
+  const displayName = authUser
+    ? (authUser.displayName || (authUser.email ? authUser.email.split("@")[0] : user.name))
+    : user.name;
+  const displayEmail = authUser ? authUser.email : user.email;
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
@@ -72,17 +84,26 @@ export function Navbar() {
   const roleLabels: Record<Role, { title: string; subtitle: string; color: string }> = {
     student: {
       title: "Student View",
-      subtitle: "Aarav Sharma • 7 Credits",
+      subtitle:
+        authUser && authUser.role === "student"
+          ? `${displayName} • ${user.credits} Credits`
+          : "Aarav Sharma • 7 Credits",
       color: "bg-[#22C55E]",
     },
     coordinator: {
       title: "Coordinator View",
-      subtitle: "Dr. Sarah Lin • MakerSpace Lead",
+      subtitle:
+        authUser && authUser.role === "coordinator"
+          ? `${displayName} • Facility Lead`
+          : "Dr. Sarah Lin • MakerSpace Lead",
       color: "bg-[#38BDF8]",
     },
     admin: {
       title: "Admin View",
-      subtitle: "Marcus Vance • Campus Oversight",
+      subtitle:
+        authUser && authUser.role === "admin"
+          ? `${displayName} • Campus Oversight`
+          : "Marcus Vance • Campus Oversight",
       color: "bg-[#C084FC]",
     },
   };
@@ -248,13 +269,13 @@ export function Navbar() {
                   className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-2 rounded-2xl bg-[#FFFEF2] hover:bg-[#FFD60A] text-[#111111] border-[2.5px] border-[#111111] shadow-[3px_3px_0px_#111] active:translate-x-[1.5px] active:translate-y-[1.5px] active:shadow-none transition min-h-[44px] focus:outline-none focus:ring-2 focus:ring-black"
                   aria-label="User role and account menu"
                 >
-                  <Avatar name={user.name} role={role} size="sm" />
+                  <Avatar name={displayName} role={role} size="sm" />
                   <div className="hidden lg:flex flex-col text-left">
                     <span className="text-xs font-black text-[#111111] leading-tight">
-                      {user.name}
+                      {displayName}
                     </span>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-[#111111]/70">
-                      {role} demo
+                      {authUser ? role : `${role} demo`}
                     </span>
                   </div>
                   <ChevronDown className="w-4 h-4 text-[#111111] stroke-[3] hidden sm:block" />
@@ -265,15 +286,15 @@ export function Navbar() {
                   <div className="absolute right-0 top-full mt-3 w-72 bg-[#FFF8E7] rounded-3xl border-[3.5px] border-[#111111] shadow-[6px_6px_0px_0px_#111111] p-4 z-50 animate-in fade-in zoom-in-95 duration-100">
                     <div className="p-2 border-b-[2.5px] border-[#111111] mb-2 bg-[#FFFEF2] rounded-2xl">
                       <span className="text-[10px] font-black uppercase tracking-wider text-[#111111]/70 block">
-                        Active Utilix Persona
+                        {authUser ? "Active Campus Account" : "Active Utilix Persona"}
                       </span>
                       <div className="flex items-center gap-2.5 mt-2">
-                        <Avatar name={user.name} role={role} size="md" />
+                        <Avatar name={displayName} role={role} size="md" />
                         <div>
-                          <p className="text-xs font-black text-[#111111]">{user.name}</p>
+                          <p className="text-xs font-black text-[#111111]">{displayName}</p>
                           <p className="text-[11px] font-medium text-[#111111]/80">{user.department}</p>
                           <p className="text-[10px] text-[#111111] font-mono font-bold mt-0.5">
-                            {user.email}
+                            {displayEmail}
                           </p>
                         </div>
                       </div>
@@ -293,6 +314,13 @@ export function Navbar() {
                             onClick={() => {
                               setRole(r);
                               setRoleDropdownOpen(false);
+                              const targetPath =
+                                r === "admin"
+                                  ? "/dashboard/admin"
+                                  : r === "coordinator"
+                                  ? "/dashboard/coordinator"
+                                  : "/dashboard";
+                              router.push(targetPath);
                             }}
                             className={cn(
                               "w-full text-left p-2.5 rounded-2xl border-[2px] transition flex items-center justify-between min-h-[44px]",
@@ -319,14 +347,33 @@ export function Navbar() {
                     </div>
 
                     <div className="pt-3 mt-3 border-t-[2.5px] border-[#111111] flex items-center justify-between text-xs px-2">
-                      <Link
-                        href="/login"
-                        onClick={() => setRoleDropdownOpen(false)}
-                        className="text-[#111111] font-black hover:underline flex items-center gap-1.5 py-1"
-                      >
-                        <UserCheck className="w-4 h-4 stroke-[2.5]" />
-                        <span>One-click Login Page</span>
-                      </Link>
+                      {authUser ? (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setRoleDropdownOpen(false);
+                            if (typeof document !== "undefined") {
+                              document.cookie = "utilix_active_role=; path=/; max-age=0;";
+                            }
+                            if (logout) {
+                              await logout();
+                            }
+                          }}
+                          className="w-full text-left text-red-600 font-black hover:underline flex items-center gap-1.5 py-1 text-xs"
+                        >
+                          <LogOut className="w-4 h-4 stroke-[2.5]" />
+                          <span>Sign Out</span>
+                        </button>
+                      ) : (
+                        <Link
+                          href="/login"
+                          onClick={() => setRoleDropdownOpen(false)}
+                          className="text-[#111111] font-black hover:underline flex items-center gap-1.5 py-1"
+                        >
+                          <UserCheck className="w-4 h-4 stroke-[2.5]" />
+                          <span>One-click Login Page</span>
+                        </Link>
+                      )}
                     </div>
                   </div>
                 )}
@@ -352,9 +399,9 @@ export function Navbar() {
             {/* Mobile Credit & Persona pill */}
             <div className="p-3.5 bg-[#FFFEF2] rounded-2xl border-[2.5px] border-[#111111] shadow-[3px_3px_0px_#111] flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <Avatar name={user.name} role={role} size="sm" />
+                <Avatar name={displayName} role={role} size="sm" />
                 <div>
-                  <p className="text-xs font-black text-[#111111]">{user.name}</p>
+                  <p className="text-xs font-black text-[#111111]">{displayName}</p>
                   <p className="text-[11px] font-bold text-[#111111]/70 capitalize">{role} role</p>
                 </div>
               </div>
@@ -392,6 +439,13 @@ export function Navbar() {
                     onClick={() => {
                       setRole(r);
                       setMobileMenuOpen(false);
+                      const targetPath =
+                        r === "admin"
+                          ? "/dashboard/admin"
+                          : r === "coordinator"
+                          ? "/dashboard/coordinator"
+                          : "/dashboard";
+                      router.push(targetPath);
                     }}
                     className={cn(
                       "py-2.5 px-2 rounded-2xl text-xs font-black capitalize border-[2.5px] border-[#111111] text-center min-h-[44px] transition-all",

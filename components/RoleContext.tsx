@@ -1,7 +1,8 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useMemo } from "react";
 import { Role, DemoUser, AppNotification } from "./types";
+import { AuthContext } from "@/lib/auth/context";
 
 export const DEMO_USERS: Record<Role, DemoUser> = {
   student: {
@@ -88,18 +89,61 @@ interface RoleContextType {
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
 
 export function RoleProvider({ children }: { children: React.ReactNode }) {
-  const [role, setRoleState] = useState<Role>("student");
-  const [user, setUser] = useState<DemoUser>(DEMO_USERS.student);
-  const [notifications, setNotifications] = useState<AppNotification[]>(INITIAL_NOTIFICATIONS);
+  const authContext = useContext(AuthContext);
+  const authUser = authContext?.user ?? null;
 
-  useEffect(() => {
-    // Sync active user state when role switches
-    setUser(DEMO_USERS[role]);
-  }, [role]);
+  const [roleOverride, setRoleOverride] = useState<Role | null>(null);
+  const [notifications, setNotifications] = useState<AppNotification[]>(INITIAL_NOTIFICATIONS);
+  const [creditAdjustment, setCreditAdjustment] = useState<number>(0);
+
+  // Derive current role: manual demo override if selected, else authenticated user's role, else default student
+  const role: Role = roleOverride ?? ((authUser?.role as Role) || "student");
+
+  // Derive current user profile reactively without cascading setState
+  const user: DemoUser = useMemo(() => {
+    if (authUser) {
+      const resolvedRole = role;
+      const baseCredits =
+        resolvedRole === "coordinator" ? 50 : resolvedRole === "admin" ? 999 : 8;
+      const effectiveCredits = Math.max(0, baseCredits + creditAdjustment);
+
+      return {
+        id: authUser.uid,
+        name: authUser.displayName || authUser.email.split("@")[0] || "Campus Member",
+        email: authUser.email,
+        role: resolvedRole,
+        department:
+          resolvedRole === "coordinator"
+            ? "Design Lab & Makerspace"
+            : resolvedRole === "admin"
+            ? "Campus Operations"
+            : "Engineering & Robotics",
+        yearOrDesignation:
+          resolvedRole === "coordinator"
+            ? "Facility Coordinator"
+            : resolvedRole === "admin"
+            ? "Campus Administrator"
+            : "Enrolled Student",
+        credits: effectiveCredits,
+        maxCredits: resolvedRole === "coordinator" ? 50 : resolvedRole === "admin" ? 999 : 10,
+        activeRequestsCount: 0,
+        trustScore: 100,
+        isDemo: authUser.source === "mock",
+      };
+    }
+
+    if (roleOverride) {
+      return DEMO_USERS[roleOverride];
+    }
+
+    return DEMO_USERS.student;
+  }, [role, roleOverride, authUser, creditAdjustment]);
 
   const setRole = (newRole: Role) => {
-    setRoleState(newRole);
-    setUser(DEMO_USERS[newRole]);
+    if (typeof document !== "undefined") {
+      document.cookie = `utilix_active_role=${newRole}; path=/; max-age=86400; SameSite=Lax`;
+    }
+    setRoleOverride(newRole);
   };
 
   const markAsRead = (id: string) => {
@@ -114,17 +158,14 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 
   const useCredit = (amount: number): boolean => {
     if (user.credits >= amount) {
-      setUser((prev) => ({ ...prev, credits: prev.credits - amount }));
+      setCreditAdjustment((prev) => prev - amount);
       return true;
     }
     return false;
   };
 
   const refundCredit = (amount: number) => {
-    setUser((prev) => ({
-      ...prev,
-      credits: Math.min(prev.maxCredits, prev.credits + amount),
-    }));
+    setCreditAdjustment((prev) => prev + amount);
   };
 
   const unreadCount = notifications.filter((n) => !n.read).length;

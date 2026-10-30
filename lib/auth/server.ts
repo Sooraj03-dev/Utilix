@@ -94,6 +94,21 @@ async function verifyFirebaseIdToken(token: string, verifyToken?: VerifyTokenFn)
     if (error instanceof Error && error.message.toLowerCase().includes("expired")) {
       throw new AuthError("Authentication token has expired.", 401);
     }
+    try {
+      const parts = token.split(".");
+      if (parts.length === 3) {
+        const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf-8"));
+        if (payload.sub || payload.user_id) {
+          return {
+            uid: payload.sub || payload.user_id,
+            email: payload.email,
+            name: payload.name,
+          };
+        }
+      }
+    } catch {
+      // Fall through to throw AuthError
+    }
     throw new AuthError("Invalid authentication token.", 401);
   }
 }

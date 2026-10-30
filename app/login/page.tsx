@@ -31,6 +31,8 @@ import { useRole, DEMO_USERS } from "@/components/RoleContext";
 import { useToast } from "@/components/ToastContext";
 import { Role } from "@/components/types";
 import { useAuth } from "@/lib/auth/context";
+import { getFirebaseClientAuth } from "@/lib/firebase/client";
+import { signInWithEmailAndPassword } from "firebase/auth";
 
 // Legitimate Google Brand Asset SVG
 function GoogleIcon({ className = "w-5 h-5" }: { className?: string }) {
@@ -55,12 +57,6 @@ function GoogleIcon({ className = "w-5 h-5" }: { className?: string }) {
     </svg>
   );
 }
-
-const DEMO_CREDENTIALS: Record<Role, { email: string; pass: string }> = {
-  student: { email: "student01@utilix.local", pass: "UtilixPassword2026!" },
-  coordinator: { email: "coord-lab@utilix.local", pass: "UtilixPassword2026!" },
-  admin: { email: "admin-platform@utilix.local", pass: "UtilixPassword2026!" },
-};
 
 function getSafeRedirectUrl(userRole: string, candidate?: string | null): string {
   if (
@@ -99,7 +95,7 @@ function LoginContent() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [activeTab, setActiveTab] = useState<"google" | "email" | "demo">("google");
+  const [activeTab, setActiveTab] = useState<"roles" | "email">("roles");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isEmailLoading, setIsEmailLoading] = useState(false);
@@ -112,13 +108,18 @@ function LoginContent() {
     try {
       const signedInUser = await loginWithGoogle();
       if (signedInUser) {
-        setRole(signedInUser.role as Role);
+        const resolvedRole = (signedInUser.role as Role) || "student";
+        if (typeof document !== "undefined") {
+          document.cookie = `utilix_active_role=${resolvedRole}; path=/; max-age=86400; SameSite=Lax`;
+        }
+        setRole(resolvedRole);
         success(
           `Welcome, ${signedInUser.displayName}! Signed in with Google.`,
           "Authentication Success"
         );
-        const destination = getSafeRedirectUrl(signedInUser.role, redirectParam);
+        const destination = getSafeRedirectUrl(resolvedRole, redirectParam);
         router.push(destination);
+        router.refresh();
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Google authentication failed.";
@@ -150,12 +151,16 @@ function LoginContent() {
       // Verify active session profile to determine role
       const res = await fetch("/api/auth/session");
       const json = await res.json();
-      const resolvedRole = json?.user?.role || "student";
-      setRole(resolvedRole as Role);
+      const resolvedRole = (json?.user?.role as Role) || "student";
+      if (typeof document !== "undefined") {
+        document.cookie = `utilix_active_role=${resolvedRole}; path=/; max-age=86400; SameSite=Lax`;
+      }
+      setRole(resolvedRole);
 
       success("Signed in successfully to Utilix.", "Welcome Back");
       const destination = getSafeRedirectUrl(resolvedRole, redirectParam);
       router.push(destination);
+      router.refresh();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Invalid credentials or user not found.";
       setErrorMessage(msg);
@@ -165,25 +170,96 @@ function LoginContent() {
     }
   };
 
-  // 3. One-Click Demo Persona Handler
+  // 3. One-Click Demo Persona Handler (Firebase Authentication)
   const handleDemoSignIn = async (targetRole: Role) => {
     setErrorMessage(null);
     const persona = DEMO_USERS[targetRole];
-    const creds = DEMO_CREDENTIALS[targetRole];
-
     setIsEmailLoading(true);
+
     try {
-      await login(creds.email, creds.pass);
-      setRole(targetRole);
+      // Step 1: Fetch demo credentials securely from server (no passwords in client bundle)
+      const credsRes = await fetch("/api/auth/demo-credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: targetRole }),
+      });
+
+      if (!credsRes.ok) {
+        const errorData = (await credsRes.json().catch(() => ({}))) as { error?: string };
+        throw new Error(errorData.error || "Demo accounts are temporarily unavailable.");
+      }
+
+      const { email, password } = (await credsRes.json()) as { email: string; password: string };
+
+      // Step 2: Authenticate through Firebase signInWithEmailAndPassword
+      const auth = getFirebaseClientAuth();
+      if (!auth) {
+        throw new Error("Firebase Authentication is not configured.");
+      }
+
+      let userCredential;
+      try {
+        userCredential = await signInWithEmailAndPassword(auth, email, password);
+      } catch (authErr: unknown) {
+        const errorCode =
+          typeof authErr === "object" && authErr !== null && "code" in authErr
+            ? String((authErr as { code: unknown }).code)
+            : "";
+
+        if (errorCode === "auth/user-not-found") {
+          throw new Error(
+            `Demo account for ${targetRole} (${email}) was not found in Firebase Authentication. Please seed the database.`
+          );
+        }
+        if (errorCode === "auth/wrong-password" || errorCode === "auth/invalid-credential") {
+          throw new Error(`Invalid credentials for ${email}. Please ensure demo passwords match.`);
+        }
+        if (errorCode === "auth/too-many-requests") {
+          throw new Error(
+            "Access to this demo account has been temporarily disabled due to many failed login attempts. Please try again later."
+          );
+        }
+        if (errorCode === "auth/network-request-failed") {
+          throw new Error("Network error connecting to Firebase Authentication. Check your connection.");
+        }
+        throw authErr;
+      }
+
+      // Step 3: Exchange Firebase ID token through existing /api/auth/session endpoint
+      const idToken = await userCredential.user.getIdToken(true);
+      const sessionRes = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+
+      if (!sessionRes.ok) {
+        const sessionErr = (await sessionRes.json().catch(() => ({}))) as { error?: string };
+        throw new Error(sessionErr.error || "Failed to establish server session.");
+      }
+
+      const sessionData = (await sessionRes.json().catch(() => ({}))) as {
+        user?: { role?: string; displayName?: string };
+      };
+      const resolvedRole = (sessionData?.user?.role as Role) || targetRole;
+
+      if (typeof document !== "undefined") {
+        document.cookie = `utilix_active_role=${resolvedRole}; path=/; max-age=86400; SameSite=Lax`;
+      }
+      setRole(resolvedRole);
+
       success(
         `Active session: ${persona.name} (${targetRole.toUpperCase()}).`,
         "Demo Persona Loaded"
       );
-      const destination = getSafeRedirectUrl(targetRole, redirectParam);
+
+      // Step 4: Redirect to the correct role dashboard
+      const destination = getSafeRedirectUrl(resolvedRole, redirectParam);
       router.push(destination);
+      router.refresh();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Demo sign-in failed.";
-      setErrorMessage(`${msg} Ensure Firebase Auth and Firestore seed data are active.`);
+      setErrorMessage(msg);
       toastError(msg, "Demo Login Failed");
     } finally {
       setIsEmailLoading(false);
@@ -374,10 +450,10 @@ function LoginContent() {
                     </a>
                     <button
                       type="button"
-                      onClick={() => { setActiveTab("demo"); setErrorMessage(null); }}
+                      onClick={() => { setActiveTab("roles"); setErrorMessage(null); }}
                       className="px-3 py-1.5 rounded-xl bg-white hover:bg-amber-100 text-amber-900 font-bold text-xs text-center border border-amber-300 transition"
                     >
-                      Use Demo Accounts in meantime &rarr;
+                      Use Demo Portals in meantime &rarr;
                     </button>
                   </div>
                 </div>
@@ -394,24 +470,24 @@ function LoginContent() {
               )
             )}
 
-            {/* Navigation Tabs between Google, Campus Email, and Demo */}
+            {/* Navigation Tabs between Role Portals & Campus Email */}
             <div className="flex rounded-2xl bg-[#FFF9E6] border-[2px] border-[#111111] p-1.5 gap-1.5 text-xs font-black shadow-[2px_2px_0px_#111]">
               <button
                 type="button"
-                onClick={() => { setActiveTab("google"); setErrorMessage(null); }}
+                onClick={() => { setActiveTab("roles"); setErrorMessage(null); }}
                 className={`flex-1 py-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-black ${
-                  activeTab === "google"
+                  activeTab === "roles"
                     ? "bg-[#FFD60A] text-[#111111] shadow-[2px_2px_0px_#111]"
                     : "text-[#111111]/70 hover:text-[#111111]"
                 }`}
               >
-                <GoogleIcon className="w-3.5 h-3.5" />
-                <span>Google</span>
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Role Portals (Student / Coord / Admin)</span>
               </button>
               <button
                 type="button"
                 onClick={() => { setActiveTab("email"); setErrorMessage(null); }}
-                className={`flex-1 py-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-black ${
+                className={`py-2.5 px-3 rounded-xl transition-all flex items-center justify-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-black ${
                   activeTab === "email"
                     ? "bg-[#FFD60A] text-[#111111] shadow-[2px_2px_0px_#111]"
                     : "text-[#111111]/70 hover:text-[#111111]"
@@ -420,55 +496,130 @@ function LoginContent() {
                 <Mail className="w-3.5 h-3.5" />
                 <span>Campus Email</span>
               </button>
-              <button
-                type="button"
-                onClick={() => { setActiveTab("demo"); setErrorMessage(null); }}
-                className={`flex-1 py-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-black ${
-                  activeTab === "demo"
-                    ? "bg-[#FFD60A] text-[#111111] shadow-[2px_2px_0px_#111]"
-                    : "text-[#111111]/70 hover:text-[#111111]"
-                }`}
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Demo Accounts</span>
-              </button>
             </div>
 
-            {/* ─── TAB 1: Google Authentication (Hero) ──────────────────── */}
-            {activeTab === "google" && (
+            {/* ─── TAB 1: Role Portals (Upfront & Prominent) ─────────────── */}
+            {activeTab === "roles" && (
               <div className="space-y-4 pt-1">
-                <div className="bg-[#FFF9E6] rounded-2xl p-5 border-[2px] border-[#111111] text-xs font-medium text-[#111111]/85 space-y-2">
-                  <div className="flex items-center gap-1.5 font-black text-[#111111] text-xs">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
-                    <span>Instant University Single Sign-On</span>
+                {/* 1. Student Portal */}
+                <div className="p-4 rounded-2xl border-[3px] border-[#111111] bg-[#FFFEF2] shadow-[4px_4px_0px_0px_#111111] space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-black text-[#111111]">🎓 Student & Campus User Portal</span>
+                    </div>
+                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-[#22C55E] text-black border border-black shadow-[1px_1px_0px_#111]">
+                      Student
+                    </span>
                   </div>
-                  <p className="leading-relaxed">
-                    Click below to authenticate using your university Google Workspace account. Your student profile, default credits, and eligibility status will be resolved automatically.
+                  <p className="text-xs text-[#111111]/75 font-medium leading-relaxed">
+                    Browse equipment, submit booking requests, manage monthly credits, and verify lab certifications.
                   </p>
+
+                  <div className="space-y-2 pt-1">
+                    {/* Primary Google SSO Button */}
+                    <button
+                      type="button"
+                      onClick={handleGoogleSignIn}
+                      disabled={isGoogleLoading || authLoading}
+                      className="w-full min-h-[46px] px-4 py-2.5 rounded-xl border-[2.5px] border-[#111111] bg-white text-[#111111] font-black text-xs sm:text-sm flex items-center justify-center gap-2.5 shadow-[3px_3px_0px_0px_#111111] hover:bg-yellow-50 hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[1.5px] active:translate-y-[1.5px] active:shadow-none transition-all disabled:opacity-60 disabled:cursor-not-allowed group cursor-pointer"
+                    >
+                      {isGoogleLoading ? (
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 border-2 border-[#111111] border-t-transparent rounded-full animate-spin" />
+                          <span>Connecting to Google...</span>
+                        </div>
+                      ) : (
+                        <>
+                          <GoogleIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                          <span>Continue with Google (SSO)</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Quick 1-Click Student Demo */}
+                    <button
+                      type="button"
+                      onClick={() => handleDemoSignIn("student")}
+                      disabled={isEmailLoading || authLoading}
+                      className="w-full py-2 px-3 rounded-xl border-[2px] border-[#111111]/60 bg-[#FFF9E6] hover:bg-[#FFD60A] hover:border-[#111111] text-[#111111] font-bold text-xs flex items-center justify-between transition group"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Avatar name="Aarav Sharma" role="student" size="sm" />
+                        <span className="font-black">1-Click Student Demo: Aarav Sharma</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-[#111111]/60 group-hover:text-black flex items-center">
+                        Login &rarr;
+                      </span>
+                    </button>
+                  </div>
                 </div>
 
-                {/* PROMINENT GOOGLE SIGN IN BUTTON */}
-                <button
-                  type="button"
-                  onClick={handleGoogleSignIn}
-                  disabled={isGoogleLoading || authLoading}
-                  className="w-full min-h-[52px] px-6 py-3.5 rounded-2xl border-[3px] border-[#111111] bg-white text-[#111111] font-black text-sm flex items-center justify-center gap-3 shadow-[4px_4px_0px_0px_#111111] hover:bg-slate-50 hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[5px_5px_0px_0px_#111111] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0px_0px_#111111] transition-all disabled:opacity-60 disabled:cursor-not-allowed group cursor-pointer"
-                >
-                  {isGoogleLoading ? (
+                {/* 2. Coordinator Portal */}
+                <div className="p-4 rounded-2xl border-[3px] border-[#111111] bg-[#FFFEF2] shadow-[4px_4px_0px_0px_#111111] space-y-3">
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-[#111111] border-t-transparent rounded-full animate-spin" />
-                      <span>Connecting to Google...</span>
+                      <span className="text-sm font-black text-[#111111]">🔬 Lab Coordinator Portal</span>
                     </div>
-                  ) : (
-                    <>
-                      <GoogleIcon className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                      <span>Continue with Google</span>
-                    </>
-                  )}
-                </button>
+                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-[#38BDF8] text-black border border-black shadow-[1px_1px_0px_#111]">
+                      Coordinator
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#111111]/75 font-medium leading-relaxed">
+                    Review and approve reservation requests, grant training certifications, and log equipment checkouts.
+                  </p>
 
-                <div className="text-[11px] text-center text-[#111111]/60 font-semibold">
-                  By continuing, you agree to institutional resource guidelines &amp; safety requirements.
+                  <button
+                    type="button"
+                    onClick={() => handleDemoSignIn("coordinator")}
+                    disabled={isEmailLoading || authLoading}
+                    className="w-full min-h-[46px] px-4 py-2.5 rounded-xl border-[2.5px] border-[#111111] bg-[#38BDF8] hover:bg-[#0284C7] hover:text-white text-[#111111] font-black text-xs sm:text-sm flex items-center justify-between shadow-[3px_3px_0px_0px_#111111] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[1.5px] active:translate-y-[1.5px] active:shadow-none transition-all group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Avatar name="Dr. Sarah Lin" role="coordinator" size="sm" />
+                      <div className="text-left">
+                        <p className="font-black text-xs sm:text-sm">Sign In as Coordinator</p>
+                        <p className="text-[10px] font-bold opacity-80">Dr. Sarah Lin • Facility Lead</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 font-mono text-xs">
+                      <span>Go to Queue</span>
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                  </button>
+                </div>
+
+                {/* 3. Platform Admin Portal */}
+                <div className="p-4 rounded-2xl border-[3px] border-[#111111] bg-[#FFFEF2] shadow-[4px_4px_0px_0px_#111111] space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-black text-[#111111]">🛡️ Campus Administrator Portal</span>
+                    </div>
+                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-[#C084FC] text-black border border-black shadow-[1px_1px_0px_#111]">
+                      Admin
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#111111]/75 font-medium leading-relaxed">
+                    Algorithmic fairness telemetry (Gini parity index), quota policy management, and campus audit trail.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDemoSignIn("admin")}
+                    disabled={isEmailLoading || authLoading}
+                    className="w-full min-h-[46px] px-4 py-2.5 rounded-xl border-[2.5px] border-[#111111] bg-[#C084FC] hover:bg-[#9333EA] hover:text-white text-[#111111] font-black text-xs sm:text-sm flex items-center justify-between shadow-[3px_3px_0px_0px_#111111] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[1.5px] active:translate-y-[1.5px] active:shadow-none transition-all group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Avatar name="Marcus Vance" role="admin" size="sm" />
+                      <div className="text-left">
+                        <p className="font-black text-xs sm:text-sm">Sign In as Campus Admin</p>
+                        <p className="text-[10px] font-bold opacity-80">Marcus Vance • Dean of Facilities</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 font-mono text-xs">
+                      <span>Go to Admin</span>
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                  </button>
                 </div>
               </div>
             )}
@@ -509,81 +660,6 @@ function LoginContent() {
                   Sign In with Password
                 </Button>
               </form>
-            )}
-
-            {/* ─── TAB 3: Pre-seeded Demo Personas ─────────────────────── */}
-            {activeTab === "demo" && (
-              <div className="space-y-3 pt-1">
-                <p className="text-xs text-[#111111]/70 font-semibold">
-                  Instant one-click access using pre-seeded accounts in Firebase Auth &amp; Firestore:
-                </p>
-
-                {/* Student */}
-                <button
-                  type="button"
-                  onClick={() => handleDemoSignIn("student")}
-                  disabled={isEmailLoading || authLoading}
-                  className="w-full p-3 rounded-2xl border-[2.5px] border-[#111111] bg-[#FFF9E6] shadow-[2.5px_2.5px_0px_#111] hover:bg-yellow-100/70 transition flex items-center justify-between text-left group"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Avatar name="Aarav Sharma" role="student" size="sm" />
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-black text-[#111111]">student01@utilix.local</span>
-                        <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-[#22C55E] border border-black font-black">
-                          Student
-                        </span>
-                      </div>
-                      <p className="text-[10px] font-bold text-[#111111]/60">20 Credits • Certified</p>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-[#111111] group-hover:translate-x-1 transition-transform" />
-                </button>
-
-                {/* Coordinator */}
-                <button
-                  type="button"
-                  onClick={() => handleDemoSignIn("coordinator")}
-                  disabled={isEmailLoading || authLoading}
-                  className="w-full p-3 rounded-2xl border-[2.5px] border-[#111111] bg-[#FFF9E6] shadow-[2.5px_2.5px_0px_#111] hover:bg-yellow-100/70 transition flex items-center justify-between text-left group"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Avatar name="Dr. Sarah Lin" role="coordinator" size="sm" />
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-black text-[#111111]">coord-lab@utilix.local</span>
-                        <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-[#38BDF8] border border-black font-black">
-                          Coordinator
-                        </span>
-                      </div>
-                      <p className="text-[10px] font-bold text-[#111111]/60">Lab Approvals • Checkouts</p>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-[#111111] group-hover:translate-x-1 transition-transform" />
-                </button>
-
-                {/* Admin */}
-                <button
-                  type="button"
-                  onClick={() => handleDemoSignIn("admin")}
-                  disabled={isEmailLoading || authLoading}
-                  className="w-full p-3 rounded-2xl border-[2.5px] border-[#111111] bg-[#FFF9E6] shadow-[2.5px_2.5px_0px_#111] hover:bg-yellow-100/70 transition flex items-center justify-between text-left group"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Avatar name="Marcus Vance" role="admin" size="sm" />
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-black text-[#111111]">admin-platform@utilix.local</span>
-                        <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-[#C084FC] border border-black font-black">
-                          Admin
-                        </span>
-                      </div>
-                      <p className="text-[10px] font-bold text-[#111111]/60">Policy Control • Audit Trail</p>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-[#111111] group-hover:translate-x-1 transition-transform" />
-                </button>
-              </div>
             )}
 
             {/* Bottom Footer Info */}

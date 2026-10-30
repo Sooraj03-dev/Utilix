@@ -22,7 +22,7 @@ import { getFirebaseClientAuth, isFirebaseClientConfigured, googleProvider } fro
 import { isMockAuthEnabled } from "./config";
 import type { AuthUser } from "../types/auth";
 
-interface AuthContextValue {
+export interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
   error: string | null;
@@ -32,7 +32,7 @@ interface AuthContextValue {
   refreshIdToken: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 async function syncFirebaseSession(user: User): Promise<void> {
   const idToken = await user.getIdToken(true);
@@ -121,9 +121,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       void (async () => {
         try {
           if (!firebaseUser) {
-            await clearServerSession();
+            // Check if there is an active session from server (e.g. cookie / demo session)
+            const currentUser = await fetchCurrentUser();
             if (isActive) {
-              setUser(null);
+              setUser(currentUser);
             }
             return;
           }
